@@ -41,28 +41,20 @@ public:
         if (i == j || j == k) {
             return glm::vec3(0);
         }
-        float average_dot = 0;
-//        for (uint l = 0; l < SAMPLES_COUNT; ++l) {
-//            for (uint m = 0; m < SAMPLES_COUNT; ++m) {
-//                for (uint n = 0; n < SAMPLES_COUNT; ++n) {
-//                    const auto itoj = Quads[j].GetSample(Samples[l]) - Quads[i].GetSample(Samples[m]);
-//                    const auto reflected = glm::normalize(glm::reflect(itoj, Quads[j].GetNormal()));
-//                    const auto toView = glm::normalize(Quads[k].GetSample(Samples[n]) - Quads[j].GetSample(Samples[l]));
-//                    average_dot += std::max(glm::dot(reflected, toView), 0.f);
-//                }
-//            }
-//        }
-//        average_dot /= SAMPLES_COUNT * SAMPLES_COUNT * SAMPLES_COUNT;
+        const auto itoj = Quads[j].GetSample(glm::vec2(0.5)) - Quads[i].GetSample(glm::vec2(0.5));
+        const auto reflected = glm::normalize(glm::reflect(itoj, Quads[j].GetNormal()));
+        const auto toView = glm::normalize(Quads[k].GetSample(glm::vec2(0.5)) - Quads[j].GetSample(glm::vec2(0.5)));
 
-        const glm::vec3 specular = std::pow(average_dot, SpecularColor[j].w / 10) * glm::vec3(SpecularColor[j]) * 4.f;
-        const glm::vec3 diffuse = glm::vec3(DiffuseColor[j]);
-        const float angle = glm::dot(
+//        return std::max(glm::dot(reflected, toView), 0.f) * glm::vec3(SpecularColor[i]) * 100.f;
+        const glm::vec3 specular = std::pow(std::max(glm::dot(reflected, toView), 0.f), SpecularColor[i].w / 100) * glm::vec3(SpecularColor[i]) * 40.f;
+//        return specular;
+        const glm::vec3 diffuse = glm::vec3(DiffuseColor[i]);
+        const float angle = 1; glm::dot(
             glm::normalize(Quads[j].GetSample(glm::vec2(0.5)) - Quads[i].GetSample(glm::vec2(0.5))),
             glm::normalize(Quads[i].GetNormal()));
         assert(angle <= 1.f);
-        return diffuse * angle;
 
-        return (specular + diffuse) / 2.f;
+        return (specular + diffuse * angle) / 2.f;
     }
 
 };

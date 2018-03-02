@@ -56,6 +56,8 @@ std::vector<std::vector<glm::vec4> > ComputeRadiosityCPU(
 //        }
 //    }
     for (int it = 0; it < iter; ++it) {
+        const int THREADS_COUNT = 10;
+#pragma omp parallel for num_threads(THREADS_COUNT)
         for (int i = 0; i < size; ++i) {
             for (int j = 0; j < size; ++j) {
                 if (!ff[i][j] || !glm::length(B_current[j][i])) {
@@ -63,10 +65,10 @@ std::vector<std::vector<glm::vec4> > ComputeRadiosityCPU(
                 }
                 for (int k = 0; k < size; ++k) {
                     B_last[i][k] += glm::vec4(rho.GetValue(i, j, k), 1) * ff[i][j] * B_current[j][i];
-//                    std::cout << B_last[i][k].x << ' ' << B_last[i][k].y << ' ' << B_last[i][k].z << std::endl;
                 }
             }
         }
+
         for (int i = 0; i < size; ++i) {
             for (int j = 0; j < size; ++j) {
                 B_sum[i][j] = B_last[i][j];

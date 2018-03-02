@@ -192,13 +192,23 @@ public:
             2
         );
 
-        for (uint i = 1; i < initialLight.size(); ++i) {
-            for (uint j = 0; j < initialLight[i].size(); ++j) {
-                initialLight[j][0] += initialLight[j][i];
-            }
-        }
+//        for (uint i = 1; i < initialLight.size(); ++i) {
+//            for (uint j = 0; j < initialLight[i].size(); ++j) {
+//                initialLight[j][0] += initialLight[j][i];
+//            }
+//        }
+//        for (uint i = 0; i < initialLight.size(); ++i) {
+//            initialLight[0][i] = initialLight[0][i] + 0.1f;// * quadsDiffuse[i];
+//        }
         for (uint i = 0; i < initialLight.size(); ++i) {
-            initialLight[0][i] = initialLight[i][0] * quadsDiffuse[i];
+            initialLight[0][i] = initialLight[i][2695] + 0.1f;
+        }
+        initialLight[0][2695] = glm::vec4(0, 1, 1, 0);
+
+        for (uint i = 0; i < quads.size(); ++i) {
+            if (std::abs(glm::dot(quads[i].GetNormal(), glm::vec4(1, 0, 0, 0))) == 1) {
+                cout << i << endl;
+            }
         }
 
 //        for (uint i = 1; i < initialLight.size(); ++i) {

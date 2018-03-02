@@ -288,7 +288,7 @@ std::vector<std::vector<glm::vec4> > ComputeInitialLight(const std::vector<Quad>
             }
             if (nearestHitQuad != -1) {
                 initialLight[nearestHitQuad][i] += glm::vec4(light.GetColor(), 1) / static_cast<float>(samples.size())
-                    //* light.GetMultiplier()
+                    * light.GetMultiplier() * 100.f
                     * glm::dot(quads[i].GetNormal(), glm::normalize(glm::vec4(light.GetPosition(), 1) - sample));
             }
         }
