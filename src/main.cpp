@@ -189,7 +189,7 @@ public:
             VirtualBRDFTensor(quads, quadsColors, quadsDiffuse),
             formFactors,
             initialLight,
-            2
+            4
         );
 
 //        for (uint i = 1; i < initialLight.size(); ++i) {
