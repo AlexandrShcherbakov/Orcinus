@@ -81,7 +81,7 @@ public:
         AddArgument("ScenePropertiesFile", "", "File with scene properties.");
     }
 
-    void PrepareBuffers(const std::vector<std::vector<float> > & ff) {
+    void PrepareBuffers() {
         std::map<
             std::pair<glm::vec4, glm::vec4>,
             int,
@@ -93,25 +93,25 @@ public:
         );
         const auto colorsForMaterials = sceneProperties->GetDiffuseColors();
         std::vector<glm::vec4> vertices, colors;
-        std::vector<uint> indices;
+        std::vector<uint> indices, interpolationValuesCount;
 
         for (uint quadNum = 0; quadNum < quads.size(); ++quadNum) {
             const auto quadVertices = quads[quadNum].GetVertices();
             std::array<uint, quadVertices.size()> quadIndices = {};
-            //glm::vec4 color = colorsForMaterials[quadVertices[0].GetMaterialNumber()];
-            //glm::vec4 color = indirectLighting[quadNum] + colorsForMaterials[quadVertices[0].GetMaterialNumber()] / 2.0f
-//                + directLighting[quadNum];
-            glm::vec4 color = initialLight[0][quadNum]; // / 5.0f
-//                              + colorsForMaterials[quadVertices[0].GetMaterialNumber()] / 2.0f;
+            glm::vec4 color = initialLight[0][quadNum];
             for (uint i = 0; i < quadVertices.size(); ++i) {
-                const auto pointWithColor = std::make_pair(quadVertices[i].GetPoint(), color);
-                const auto pointIterator = pointsIndices.find(pointWithColor);
+                const auto pointWithNormal = std::make_pair(quadVertices[i].GetPoint(), quadVertices[i].GetNormal());
+                const auto pointIterator = pointsIndices.find(pointWithNormal);
                 if (pointIterator == pointsIndices.end()) {
-                    pointsIndices[pointWithColor] = static_cast<uint>(vertices.size());
-                    vertices.push_back(pointWithColor.first);
-                    colors.push_back(pointWithColor.second);
+                    pointsIndices[pointWithNormal] = static_cast<uint>(vertices.size());
+                    vertices.push_back(pointWithNormal.first);
+                    colors.push_back(color);
+                    interpolationValuesCount.push_back(1);
+                } else {
+                    colors[pointsIndices[pointWithNormal]] += color;
+                    interpolationValuesCount[pointsIndices[pointWithNormal]]++;
                 }
-                quadIndices[i] = pointsIndices[pointWithColor];
+                quadIndices[i] = pointsIndices[pointWithNormal];
             }
             indices.push_back(quadIndices[0]);
             indices.push_back(quadIndices[1]);
@@ -119,6 +119,9 @@ public:
             indices.push_back(quadIndices[0]);
             indices.push_back(quadIndices[2]);
             indices.push_back(quadIndices[3]);
+        }
+        for (uint i = 0; i < colors.size(); ++i) {
+            colors[i] /= interpolationValuesCount[i];
         }
 
         pointsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(vertices);
@@ -192,41 +195,14 @@ public:
             4
         );
 
-//        for (uint i = 1; i < initialLight.size(); ++i) {
-//            for (uint j = 0; j < initialLight[i].size(); ++j) {
-//                initialLight[j][0] += initialLight[j][i];
-//            }
-//        }
-//        for (uint i = 0; i < initialLight.size(); ++i) {
-//            initialLight[0][i] = initialLight[0][i] + 0.1f;// * quadsDiffuse[i];
-//        }
         for (uint i = 0; i < initialLight.size(); ++i) {
-            initialLight[0][i] = initialLight[i][2695] + 0.1f;
+            initialLight[0][i] = initialLight[i][2695];// + 0.1f;
         }
         initialLight[0][2695] = glm::vec4(0, 1, 1, 0);
 
-        for (uint i = 0; i < quads.size(); ++i) {
-            if (std::abs(glm::dot(quads[i].GetNormal(), glm::vec4(1, 0, 0, 0))) == 1) {
-                cout << i << endl;
-            }
-        }
-
-//        for (uint i = 1; i < initialLight.size(); ++i) {
-//            for (uint j = 0; j < initialLight[i].size(); ++j) {
-//                initialLight[0][j] += initialLight[i][j];
-////                if (initialLight[i][j] > 0 && initialLight[i][j] < 1) {
-////                    initialLight[0][i] = 1;
-////                    cout << i << ' ' << j << endl;
-////                    break;
-////                }
-//            }
-//        }
-//        for (uint i = 0; i < initialLight.size(); ++i) {
-//            initialLight[0][i] *= quadsDiffuse[i];
-//        }
         cout << "Initial light computation: " << time(nullptr) - timestamp << " seconds" << endl;
 
-        PrepareBuffers(formFactors);
+        PrepareBuffers();
     }
 
     void RenderFunction() final {
