@@ -33,8 +33,10 @@ class RadiosityProgram : public Hors::Program {
     std::vector<Quad> quads = {};
     std::unique_ptr<Hors::SceneProperties> sceneProperties = nullptr;
     std::vector<std::vector<glm::vec4> > initialLight;
+    GLuint Program;
 
     Hors::GLBuffer pointsBuffer, indirectLightBuffer, diffuseColorBuffer, specularColorBuffer, indicesBuffer;
+    Hors::GLBuffer normalsBuffer;
     GLuint runSize = 0;
     std::unique_ptr<Hors::SpotLight> light;
 
@@ -94,6 +96,7 @@ public:
         std::vector<glm::vec4> vertices, indirectLight;
         std::vector<glm::vec4> diffusePerVertex, specularPerVertex;
         std::vector<uint> indices, interpolationValuesCount;
+        std::vector<glm::vec4> normalsPerVertex;
 
         for (uint quadNum = 0; quadNum < quads.size(); ++quadNum) {
             const auto quadVertices = quads[quadNum].GetVertices();
@@ -109,6 +112,7 @@ public:
                     interpolationValuesCount.push_back(1);
                     diffusePerVertex.push_back(quadsDiffuse[quadNum]);
                     specularPerVertex.push_back(quadsSpecular[quadNum]);
+                    normalsPerVertex.push_back(quads[quadNum].GetNormal());
                 } else {
                     indirectLight[pointsIndices[pointWithNormal]] += indirectQuadLight;
                     interpolationValuesCount[pointsIndices[pointWithNormal]]++;
@@ -130,11 +134,12 @@ public:
         indirectLightBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(indirectLight);
         diffuseColorBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(diffusePerVertex);
         specularColorBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(specularPerVertex);
+        normalsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(normalsPerVertex);
 
         indicesBuffer = Hors::GenAndFillBuffer<GL_ELEMENT_ARRAY_BUFFER>(indices);
         runSize = static_cast<GLuint>(indices.size());
 
-        GLuint Program = Hors::CompileShaderProgram(
+        Program = Hors::CompileShaderProgram(
             Hors::ReadAndCompileShader("shaders/Radiosity.vert", GL_VERTEX_SHADER),
             Hors::ReadAndCompileShader("shaders/Radiosity.frag", GL_FRAGMENT_SHADER)
         );
@@ -160,6 +165,10 @@ public:
         glBindBuffer(GL_ARRAY_BUFFER, *specularColorBuffer); CHECK_GL_ERRORS;
         glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
         glEnableVertexAttribArray(3); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_ARRAY_BUFFER, *normalsBuffer); CHECK_GL_ERRORS;
+        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
+        glEnableVertexAttribArray(4); CHECK_GL_ERRORS;
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *indicesBuffer); CHECK_GL_ERRORS;
         glEnable(GL_DEPTH_TEST); CHECK_GL_ERRORS;
@@ -212,7 +221,7 @@ public:
             tensor,
             formFactors,
             initialLight,
-            4
+            10
         );
 
         for (uint i = 0; i < initialLight.size(); ++i) {
@@ -229,6 +238,7 @@ public:
         glClearColor(0, 0, 0, 0); CHECK_GL_ERRORS;
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); CHECK_GL_ERRORS;
         glUniformMatrix4fv(CameraUniformLocation, 1, GL_FALSE, glm::value_ptr(MainCamera.GetMatrix())); CHECK_GL_ERRORS;
+        Hors::SetUniform(Program, "cameraPosition", glm::vec4(MainCamera.GetPosition(), 1)); CHECK_GL_ERRORS;
         glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(runSize), GL_UNSIGNED_INT, nullptr); CHECK_GL_ERRORS;
         glFinish(); CHECK_GL_ERRORS;
         glutSwapBuffers();
