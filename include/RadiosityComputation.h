@@ -8,6 +8,7 @@
 #include <GeometryTypes.h>
 
 #include <cmath>
+#include <fstream>
 #include <utility>
 
 std::vector<glm::vec4> RecomputeColorsForQuadsCPU(
@@ -15,52 +16,103 @@ std::vector<glm::vec4> RecomputeColorsForQuadsCPU(
     const std::vector<glm::vec4> & colors
 );
 
-inline float random(const float from, const float to) {
-    return static_cast<float>(rand()) / RAND_MAX * (to - from) + from;
-}
-
 class VirtualBRDFTensor {
-    std::vector<glm::vec4> SpecularColor;
     std::vector<glm::vec4> DiffuseColor;
-    std::vector<glm::vec3> Normals;
-    std::vector<glm::vec3> Centers;
+    std::map<std::array<short, 3>, glm::vec3> specularSparseTensor;
 
 public:
     VirtualBRDFTensor(
-        std::vector<Quad> quads,
-        std::vector<glm::vec4> specularColor,
-        std::vector<glm::vec4> diffuseColor
+        const std::string& filename,
+        const std::vector<Quad> &quads,
+        const std::vector<glm::vec4> &specularColor,
+        std::vector<glm::vec4> diffuseColor,
+        const std::vector<std::vector<float> > &ff
     ) :
-        SpecularColor(std::move(specularColor)),
         DiffuseColor(std::move(diffuseColor))
     {
-        assert(Quads.size() == SpecularColor.size());
+        uint size;
+        std::ifstream in(filename, std::ios::in | std::ios::binary);
+        if (!in.good()) {
+            assert(!quads.empty());
+            ComputeTensor(quads, specularColor, ff);
+            std::ofstream out(filename, std::ios::out | std::ios::binary);
+            size = static_cast<uint>(specularSparseTensor.size());
+            out.write(reinterpret_cast<char*>(&size), sizeof(size));
+            for (const auto& value: specularSparseTensor) {
+                for (const auto idx: value.first) {
+                    out.write(reinterpret_cast<const char*>(&idx), sizeof(idx));
+                }
+                out.write(reinterpret_cast<const char*>(&(value.second)), sizeof(value.second));
+            }
+            in.close();
+            out.close();
+            return;
+        }
+        in.read(reinterpret_cast<char*>(&size), sizeof(size));
+        for (uint i = 0; i < size; ++i) {
+            std::array<short, 3> key = {};
+            glm::vec3 value;
+            for (auto & idx: key) {
+                in.read(reinterpret_cast<char*>(&idx), sizeof(idx));
+            }
+            in.read(reinterpret_cast<char*>(&(value)), sizeof(value));
+            specularSparseTensor[key] = value;
+        }
+        in.close();
+    }
+
+    void ComputeTensor(
+        const std::vector<Quad> &quads,
+        const std::vector<glm::vec4> &specularColor,
+        const std::vector<std::vector<float>> &ff
+    ) {
+        std::vector<glm::vec3> Normals;
+        std::vector<glm::vec3> Centers;
+        assert(Quads.size() == specularColor.size());
         assert(Quads.size() == DiffuseColor.size());
-        Normals.resize(quads.size());
-        Centers.resize(quads.size());
-        for (uint i = 0; i < quads.size(); ++i) {
+        const auto SIZE = static_cast<const int>(quads.size());
+
+        Normals.resize(static_cast<unsigned long>(SIZE));
+        Centers.resize(static_cast<unsigned long>(SIZE));
+        for (int i = 0; i < SIZE; ++i) {
             Normals[i] = glm::vec3(quads[i].GetNormal());
             Centers[i] = glm::vec3(quads[i].GetSample(glm::vec2(0.5)));
         }
-    }
 
+        const int THREADS_COUNT = 10;
+#pragma omp parallel for num_threads(THREADS_COUNT)
+        for (int i = 0; i < SIZE; ++i) {
+            for (int j = 0; j < SIZE; ++j) {
+                if (!ff[i][j]) {
+                    continue;
+                }
+                for (int k = 0; k < SIZE; ++k) {
+                    if (!ff[j][k]) {
+                        continue;
+                    }
+                    const auto itoj = Centers[j] - Centers[i];
+                    const auto reflected = normalize(reflect(itoj, Normals[j]));
+                    const auto toView = normalize(Centers[k] - Centers[j]);
 
-    //From i-th quad to k-th quad through j-th quad
-    glm::vec3 GetValue(const int i, const int j, const int k) const {
-        if (i == j || j == k) {
-            return glm::vec3(0);
+                    const glm::vec3 specular = std::pow(std::max(dot(reflected, toView), 0.f), specularColor[j].w)
+                        * glm::vec3(specularColor[j]) * specularColor[j].w;
+                    if (length(specular) < 1e-7f) {
+                        continue;
+                    }
+                    std::array<short, 3> key = {static_cast<short>(i), static_cast<short>(j), static_cast<short>(k)};
+                    specularSparseTensor[key] = specular;
+                }
+            }
         }
-        const auto itoj = Centers[j] - Centers[i];
-        const auto reflected = glm::normalize(glm::reflect(itoj, Normals[j]));
-        const auto toView = glm::normalize(Centers[k] - Centers[j]);
-
-        const glm::vec3 specular = std::pow(std::max(glm::dot(reflected, toView), 0.f), SpecularColor[j].w)
-            * glm::vec3(SpecularColor[j]) * SpecularColor[j].w;
-        const glm::vec3 diffuse = glm::vec3(DiffuseColor[j]) * 3.14f;
-
-        return (specular + diffuse) / 2.f;
     }
 
+    glm::vec4 GetDiffuse(const int quadIndex) const {
+        return DiffuseColor[quadIndex];
+    }
+
+    std::map<std::array<short, 3>, glm::vec3> GetSpecularSparseTensor() const {
+        return specularSparseTensor;
+    };
 };
 
 std::vector<std::vector<float> > AdamarProduct(

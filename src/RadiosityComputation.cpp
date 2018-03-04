@@ -46,26 +46,31 @@ std::vector<std::vector<glm::vec4> > ComputeRadiosityCPU(
     auto B_current = B_last;
     const int size = B_last.size();
     std::vector<std::vector<glm::vec4> > B_sum(size);
+    std::vector<glm::vec4> BDiffuse(size);
     for (int i = 0; i < size; ++i) {
         B_sum[i].assign(size, glm::vec4(0));
         B_last[i].assign(size, glm::vec4(0));
     }
-//    for (int i = 0; i < size; ++i) {
-//        for (int j = 0; j < size; ++j) {
-//            B_sum[i][j] = initLight[i][j];
-//        }
-//    }
+    const auto specularTensor = rho.GetSpecularSparseTensor();
     for (int it = 0; it < iter; ++it) {
         const int THREADS_COUNT = 10;
+        for (const auto & specularIt : specularTensor) {
+            const auto & way = specularIt.first;
+            B_last[way[1]][way[2]] += glm::vec4(specularIt.second, 1) * ff[way[1]][way[0]] * B_current[way[0]][way[1]];
+        }
+
+        BDiffuse.assign(size, glm::vec4(0));
 #pragma omp parallel for num_threads(THREADS_COUNT)
         for (int i = 0; i < size; ++i) {
             for (int j = 0; j < size; ++j) {
-                if (!ff[i][j] || !glm::length(B_current[j][i])) {
-                    continue;
-                }
-                for (int k = 0; k < size; ++k) {
-                    B_last[i][k] += glm::vec4(rho.GetValue(j, i, k), 1) * ff[i][j] * B_current[j][i];
-                }
+                BDiffuse[i] += rho.GetDiffuse(i) * ff[i][j] * B_current[j][i];
+            }
+        }
+
+#pragma omp parallel for num_threads(THREADS_COUNT)
+        for (int i = 0; i < size; ++i) {
+            for (int k = 0; k < size; ++k) {
+                B_last[i][k] += BDiffuse[i];
             }
         }
 
