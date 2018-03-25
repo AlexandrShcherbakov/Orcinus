@@ -54,10 +54,6 @@ std::vector<std::vector<glm::vec4> > ComputeRadiosityCPU(
     const auto specularTensor = rho.GetSpecularSparseTensor();
     for (int it = 0; it < iter; ++it) {
         const int THREADS_COUNT = 10;
-        for (const auto & specularIt : specularTensor) {
-            const auto & way = specularIt.first;
-            B_last[way[1]][way[2]] += glm::vec4(specularIt.second, 1) * ff[way[1]][way[0]] * B_current[way[0]][way[1]];
-        }
 
         BDiffuse.assign(size, glm::vec4(0));
 #pragma omp parallel for num_threads(THREADS_COUNT)

@@ -225,9 +225,8 @@ public:
         );
 
         for (uint i = 0; i < initialLight.size(); ++i) {
-            initialLight[0][i] = initialLight[i][2695];// + 0.1f;
+            initialLight[0][i] = initialLight[i][0];
         }
-        initialLight[0][2695] = glm::vec4(0, 1, 1, 0);
 
         cout << "Initial light computation: " << time(nullptr) - timestamp << " seconds" << endl;
 

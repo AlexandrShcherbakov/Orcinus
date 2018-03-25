@@ -26,9 +26,9 @@ void main() {
     float coneMultiplier = clamp((currentCos - outerCos) / (innerCos - outerCos), 0, 1);
     float lambertTerm = max(dot(normalize(vertexNormal), -lightToPoint), 0);
     vec3 incomeLight = lightColor * coneMultiplier;
-    vec4 diffuseColor = vertexDiffuseColor * lambertTerm;
+    vec4 diffuseColor = vertexDiffuseColor * lambertTerm / 3.14;
     float specularTerm = pow(dot(pointToEye, reflect(lightToPoint, normalize(vertexNormal))), vertexSpecularColor.w);
     vec4 specularColor = specularTerm * vertexSpecularColor;
     vec4 directLight = vec4(incomeLight, 1) * (diffuseColor + specularColor);
-    outColor = directLight + vertexIndirectLight;
+    outColor = pow(directLight + vertexIndirectLight, vec4(1 / 2.2));
 }
