@@ -4,6 +4,9 @@ project(Orcinus)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -pedantic -fopenmp")
 
+set(CMAKE_PREFIX_PATH "/usr/lib64")
+
+message("${CMAKE_MODULE_PATH}")
 
 include_directories("~/InpharkhLib")
 include_directories("include")
@@ -43,6 +46,9 @@ find_package(Boost REQUIRED COMPONENTS program_options)
 include_directories(${Boost_INCLUDE_DIRS})
 link_directories(${Boost_LIBRARY_DIRS})
 
+find_package(embree 3.0 REQUIRED)
+include_directories(${EMBREE_INCLUDE_DIRS})
+
 include_directories(${GLM_INCLUDE_DIRS})
 include_directories("~/3rdPartyLibs")
 
@@ -53,4 +59,5 @@ target_link_libraries(Orcinus
         ${GLUT_LIBRARY}
         ${GLEW_LIBRARY}
         ${Boost_LIBRARIES}
+        ${EMBREE_LIBRARY}
 )

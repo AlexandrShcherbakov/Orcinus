@@ -18,6 +18,12 @@ std::vector<std::vector<float> > ComputeFormFactors(
     bool antiradiance=false
 );
 
+std::vector<std::vector<float> > ComputeFormFactorsEmbree(
+    const std::vector<Quad>& quads,
+    const std::vector<glm::vec4>& points,
+    const std::vector<uint>& indices
+);
+
 std::vector<std::vector<float> > ComputeAlternativeFF(const std::vector<Quad>& quads);
 
 std::vector<std::vector<glm::vec4> > ComputeInitialLight(const std::vector<Quad>& quads, const Hors::SpotLight& light);

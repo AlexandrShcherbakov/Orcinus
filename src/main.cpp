@@ -180,15 +180,34 @@ public:
         MainCamera = cameras[0];
     }
 
+    auto FormFactorComputationEmbree() {
+        std::vector<glm::vec4> points(
+            SceneData.getVertexPositionsFloat4Array(),
+            SceneData.getVertexPositionsFloat4Array() + SceneData.getVerticesNumber()
+        );
+        std::vector<uint> indices(
+            SceneData.getTriangleVertexIndicesArray(),
+            SceneData.getTriangleVertexIndicesArray() + SceneData.getIndicesNumber()
+        );
+        return ComputeFormFactorsEmbree(quads, points, indices);
+    }
+
     void Run() final {
         const float MinCellWidth = 0.75f / Get<int>("LoD");
 
         SceneData.read(Get("InputFile"));
         quads = TesselateScene(ExtractQuadsFromScene(SceneData), MinCellWidth);
+
         assert(quads.size() < Get<uint>("MaxPatchesCount"));
-        cout << "Start to compute form-factors for " << quads.size() << " quads" << endl;
+
+        cout << "Start to compute form-factors for " << quads.size() << " quads using Embree" << endl;
         auto timestamp = time(nullptr);
-        auto formFactors = LoadFormFactors();
+        auto formFactors = FormFactorComputationEmbree();
+        cout << "Form-factors computation (Embree): " << time(nullptr) - timestamp << " seconds" << endl;
+
+        cout << "Start to compute form-factors for " << quads.size() << " quads" << endl;
+        timestamp = time(nullptr);
+        //auto formFactors = LoadFormFactors();
         for (uint i = 0; i < formFactors.size(); ++i) {
             for (uint j = i + 1; j < formFactors[i].size(); ++j) {
                 assert(formFactors[i][j] == formFactors[j][i]);

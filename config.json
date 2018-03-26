@@ -3,7 +3,7 @@
   "Title": "Radiosity",
   "WindowSize": "1600x900",
   "InputFile": "Scenes/CornellBox/scene.vsgf",
-  "LoD": 1,
+  "LoD": 4,
   "ScenePropertiesFile": "Scenes/CornellBox/hydra_profile_generated.xml",
   "RecomputeFormFactors": 0
 }

@@ -8,6 +8,8 @@
 #include <iostream>
 #include <random>
 
+#include <embree3/rtcore.h>
+
 
 std::vector<glm::vec2> GenerateRandomSamples(const uint samplesNumber) {
     std::default_random_engine generator;
@@ -202,29 +204,6 @@ std::vector<std::vector<float> > ComputeFormFactors(
 }
 
 
-std::vector<std::vector<float> > ComputeAlternativeFF(const std::vector<Quad>& quads) {
-    auto ffTrans = ComputeFormFactors(quads, true, false, false);
-    auto antiradiance = ComputeFormFactors(quads, true, false, true);
-    for (uint i = 0; i < antiradiance.size(); ++i) {
-        for (uint j = 0; j < antiradiance[i].size(); ++j) {
-            antiradiance[i][j] *= -1;
-            if (i == j) {
-                antiradiance[i][j] = 1;
-            }
-        }
-    }
-    std::vector<std::vector<float> > ff(antiradiance.size());
-    for (uint i = 0; i < ff.size(); ++i) {
-        ff[i].assign(ff.size(), 0);
-        for (uint j = 0; j < ff[i].size(); ++j) {
-            for (uint k = 0; k < ffTrans.size(); ++k) {
-                ff[i][j] += antiradiance[i][k] * ffTrans[k][j];
-            }
-        }
-    }
-    return ff;
-}
-
 inline float Radians(const float degrees) {
     return degrees / 180.0f * 3.14159f;
 }
@@ -296,4 +275,110 @@ std::vector<std::vector<glm::vec4> > ComputeInitialLight(const std::vector<Quad>
         }
     }
     return initialLight;
+}
+
+
+#define CHECK_EMBREE \
+{ \
+    int errCode; \
+    if ((errCode = rtcGetDeviceError(Device)) != RTC_ERROR_NONE) {\
+        std::cerr << "Embree error: " << errCode  << " line: " << __LINE__ << std::endl; \
+        exit(1); \
+    }\
+}
+
+class EmbreeFFJob {
+    RTCDevice Device;
+    RTCScene Scene;
+    RTCGeometry Geometry;
+    RTCBuffer IndicesBuffer, PointsBuffer;
+    const std::vector<Quad>& Quads;
+    std::vector<std::vector<float> > FF;
+    RTCIntersectContext IntersectionContext;
+public:
+    EmbreeFFJob(
+        const std::vector<Quad>& quads,
+        const std::vector<glm::vec4>& points,
+        const std::vector<uint>& indices
+    ): Quads(quads) {
+        Device = rtcNewDevice(""); CHECK_EMBREE
+        Scene = rtcNewScene(Device); CHECK_EMBREE
+        Geometry = rtcNewGeometry(Device, RTC_GEOMETRY_TYPE_TRIANGLE); CHECK_EMBREE
+        IndicesBuffer = rtcNewSharedBuffer(
+            Device,
+            reinterpret_cast<void*>(const_cast<unsigned *>(indices.data())),
+            indices.size() * sizeof(indices[0])); CHECK_EMBREE
+        PointsBuffer = rtcNewSharedBuffer(
+            Device,
+            reinterpret_cast<void*>(const_cast<glm::vec4*>(points.data())),
+            points.size() * sizeof(points[0])); CHECK_EMBREE
+
+        rtcSetGeometryBuffer(Geometry, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3, IndicesBuffer, 0, 0, indices.size() / 3); CHECK_EMBREE
+        rtcSetGeometryBuffer(Geometry, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3, PointsBuffer, 0, sizeof(float), points.size()); CHECK_EMBREE
+        rtcCommitGeometry(Geometry); CHECK_EMBREE
+        rtcAttachGeometry(Scene, Geometry); CHECK_EMBREE
+        rtcCommitScene(Scene); CHECK_EMBREE
+        rtcInitIntersectContext(&IntersectionContext); CHECK_EMBREE
+        IntersectionContext.flags = RTC_INTERSECT_CONTEXT_FLAG_COHERENT;
+        IntersectionContext.instID[0] = 0;
+    }
+
+    ~EmbreeFFJob() {
+        rtcReleaseBuffer(PointsBuffer);
+        rtcReleaseBuffer(IndicesBuffer);
+        rtcReleaseGeometry(Geometry);
+        rtcReleaseScene(Scene);
+        rtcReleaseDevice(Device);
+    }
+
+    std::vector<std::vector<float> > Execute() {
+        FF.resize(Quads.size());
+        for (auto &ff : FF) {
+            ff.assign(Quads.size(), 0);
+        }
+        auto samples = GenerateRandomSamples(16);
+        for (uint i = 0; i < FF.size(); ++i) {
+            for (uint j = i + 1; j < FF[i].size(); ++j) {
+                uint visibilityCount = 0;
+                float samplesSum = 0;
+                for (uint k = 0; k < samples.size(); ++k) {
+                    const auto sample1 = Quads[i].GetSample(samples[k]);
+                    for (uint l = 0; l < samples.size(); ++l) {
+                        const auto sample2 = Quads[j].GetSample(samples[l]);
+                        const auto rayDir = sample2 - sample1;
+                        const float rayLength = glm::length(rayDir);
+                        RTCRay ray = {
+                            sample1.x, sample1.y, sample1.z, 1e-5f,
+                            rayDir.x, rayDir.y, rayDir.z, 0.0f,
+                            rayLength - 1e-5f, 0, 0, 0,
+                        };
+                        rtcOccluded1(Scene, &IntersectionContext, &ray); CHECK_EMBREE
+
+                        if (!std::isinf(ray.tfar)) {
+                            const float cosTheta1 = std::max(glm::dot(Quads[i].GetNormal(), glm::normalize(rayDir)), 0.0f);
+                            const float cosTheta2 = std::max(glm::dot(Quads[j].GetNormal(), -glm::normalize(rayDir)), 0.0f);
+                            const float sampleValue = cosTheta1 * cosTheta2 / sqr(rayLength);
+                            if (sampleValue < 0.5 * sqr(samples.size()) * static_cast<float>(M_PI) * Quads[i].GetSquare()) {
+                                visibilityCount++;
+                                samplesSum += sampleValue;
+                            }
+                        }
+                    }
+                }
+                if (visibilityCount) {
+                    FF[i][j] = FF[j][i] = samplesSum / visibilityCount / static_cast<float>(M_PI) * Quads[i].GetSquare();
+                }
+            }
+        }
+        return FF;
+    }
+};
+
+std::vector<std::vector<float> > ComputeFormFactorsEmbree(
+    const std::vector<Quad>& quads,
+    const std::vector<glm::vec4>& points,
+    const std::vector<uint>& indices
+) {
+    EmbreeFFJob job(quads, points, indices);
+    return job.Execute();
 }

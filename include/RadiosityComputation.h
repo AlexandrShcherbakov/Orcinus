@@ -68,8 +68,8 @@ public:
     ) {
         std::vector<glm::vec3> Normals;
         std::vector<glm::vec3> Centers;
-        assert(Quads.size() == specularColor.size());
-        assert(Quads.size() == DiffuseColor.size());
+        assert(quads.size() == specularColor.size());
+        assert(quads.size() == DiffuseColor.size());
         const auto SIZE = static_cast<const int>(quads.size());
 
         Normals.resize(static_cast<unsigned long>(SIZE));
