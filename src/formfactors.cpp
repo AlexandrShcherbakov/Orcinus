@@ -336,35 +336,58 @@ public:
         for (auto &ff : FF) {
             ff.assign(Quads.size(), 0);
         }
+        const uint PACKET_SIZE = 16;
         auto samples = GenerateRandomSamples(16);
         for (uint i = 0; i < FF.size(); ++i) {
             for (uint j = i + 1; j < FF[i].size(); ++j) {
-                uint visibilityCount = 0;
-                float samplesSum = 0;
+                std::vector<std::pair<glm::vec4, glm::vec4> > rays;
                 for (uint k = 0; k < samples.size(); ++k) {
                     const auto sample1 = Quads[i].GetSample(samples[k]);
-                    for (uint l = 0; l < samples.size(); ++l) {
-                        const auto sample2 = Quads[j].GetSample(samples[l]);
-                        const auto rayDir = sample2 - sample1;
-                        const float rayLength = glm::length(rayDir);
-                        RTCRay ray = {
-                            sample1.x, sample1.y, sample1.z, 1e-5f,
-                            rayDir.x, rayDir.y, rayDir.z, 0.0f,
-                            rayLength - 1e-5f, 0, 0, 0,
-                        };
-                        rtcOccluded1(Scene, &IntersectionContext, &ray); CHECK_EMBREE
+                    for (auto sample : samples) {
+                        rays.emplace_back(std::make_pair(sample1, Quads[j].GetSample(sample) - sample1));
+                    }
+                }
+                uint visibilityCount = 0;
+                float samplesSum = 0;
+                const float BIAS = 1e-5f;
+                std::vector<RTCRay16> raysPackets(rays.size() / PACKET_SIZE);
+                for (uint k = 0; k < rays.size(); k += PACKET_SIZE) {
+                    for (uint l = 0; l < PACKET_SIZE; ++l) {
+                        raysPackets[k / PACKET_SIZE].org_x[l] = rays[k + l].first.x;
+                        raysPackets[k / PACKET_SIZE].org_y[l] = rays[k + l].first.y;
+                        raysPackets[k / PACKET_SIZE].org_z[l] = rays[k + l].first.z;
+                        raysPackets[k / PACKET_SIZE].tnear[l] = BIAS;
+                        raysPackets[k / PACKET_SIZE].dir_x[l] = rays[k + l].second.x;
+                        raysPackets[k / PACKET_SIZE].dir_y[l] = rays[k + l].second.y;
+                        raysPackets[k / PACKET_SIZE].dir_z[l] = rays[k + l].second.z;
+                        raysPackets[k / PACKET_SIZE].tfar[l] = glm::length(rays[k + l].second) - BIAS;
+                        raysPackets[k / PACKET_SIZE].id[l] = 0;
+                        raysPackets[k / PACKET_SIZE].mask[l] = 0;
+                        raysPackets[k / PACKET_SIZE].time[l] = 0;
+                    }
+                }
 
-                        if (!std::isinf(ray.tfar)) {
-                            const float cosTheta1 = std::max(glm::dot(Quads[i].GetNormal(), glm::normalize(rayDir)), 0.0f);
-                            const float cosTheta2 = std::max(glm::dot(Quads[j].GetNormal(), -glm::normalize(rayDir)), 0.0f);
-                            const float sampleValue = cosTheta1 * cosTheta2 / sqr(rayLength);
-                            if (sampleValue < 0.5 * sqr(samples.size()) * static_cast<float>(M_PI) * Quads[i].GetSquare()) {
-                                visibilityCount++;
-                                samplesSum += sampleValue;
-                            }
+                for (uint k = 0; k < rays.size(); k += PACKET_SIZE) {
+                    const int validMask = ~1u;
+                    rtcOccluded16(&validMask, Scene, &IntersectionContext, &raysPackets[k / PACKET_SIZE]); CHECK_EMBREE
+                }
+
+                for (uint k = 0; k < rays.size(); k += PACKET_SIZE) {
+                    for (uint l = 0; l < PACKET_SIZE; ++l) {
+                        if (std::isinf(raysPackets[k / PACKET_SIZE].tfar[l])) {
+                            continue;
+                        }
+                        const float rayLength = glm::length(rays[k + l].second);
+                        const float cosTheta1 = std::max(glm::dot(Quads[i].GetNormal(), glm::normalize(rays[k + l].second)), 0.0f);
+                        const float cosTheta2 = std::max(glm::dot(Quads[j].GetNormal(), -glm::normalize(rays[k + l].second)), 0.0f);
+                        const float sampleValue = cosTheta1 * cosTheta2 / sqr(rayLength);
+                        if (sampleValue < 0.5 * sqr(samples.size()) * static_cast<float>(M_PI) * Quads[i].GetSquare()) {
+                            visibilityCount++;
+                            samplesSum += sampleValue;
                         }
                     }
                 }
+
                 if (visibilityCount) {
                     FF[i][j] = FF[j][i] = samplesSum / visibilityCount / static_cast<float>(M_PI) * Quads[i].GetSquare();
                 }
