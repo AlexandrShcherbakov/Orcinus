@@ -337,14 +337,14 @@ public:
             ff.assign(Quads.size(), 0);
         }
         const uint PACKET_SIZE = 16;
-        auto samples = GenerateRandomSamples(16);
+        const auto samples = GenerateRandomSamples(16);
         for (uint i = 0; i < FF.size(); ++i) {
             for (uint j = i + 1; j < FF[i].size(); ++j) {
                 std::vector<std::pair<glm::vec4, glm::vec4> > rays;
-                for (uint k = 0; k < samples.size(); ++k) {
-                    const auto sample1 = Quads[i].GetSample(samples[k]);
-                    for (auto sample : samples) {
-                        rays.emplace_back(std::make_pair(sample1, Quads[j].GetSample(sample) - sample1));
+                for (const auto firstQuadSample : samples) {
+                    const auto sample1 = Quads[i].GetSample(firstQuadSample);
+                    for (auto secondQuadSample : samples) {
+                        rays.emplace_back(std::make_pair(sample1, Quads[j].GetSample(secondQuadSample) - sample1));
                     }
                 }
                 uint visibilityCount = 0;
