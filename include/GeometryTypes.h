@@ -121,7 +121,7 @@ public:
         return Vertices;
     }
 
-    std::vector<Quad> Tesselate(const float cellSize) const {
+    std::vector<Quad> Tessellate(const float cellSize) const {
         const auto height = distance(Vertices[0], Vertices[1]);
         const auto width = distance(Vertices[0], Vertices[3]);
         const auto heightCellsCount = static_cast<uint>(std::round(height / cellSize));
@@ -194,6 +194,10 @@ public:
         for (auto& vertex: Vertices) {
             vertex.SetNormal(normal);
         }
+    }
+
+    uint GetMaterialId() const {
+        return Vertices[0].GetMaterialNumber();
     }
 };
 

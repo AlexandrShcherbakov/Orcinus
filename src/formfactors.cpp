@@ -208,75 +208,6 @@ inline float Radians(const float degrees) {
     return degrees / 180.0f * 3.14159f;
 }
 
-bool PointInLightCone(const Hors::SpotLight& light, const glm::vec4& point) {
-    const auto lightDirection = glm::normalize(light.GetDirection());
-    const auto lightToPoint = glm::normalize(glm::vec3(point) - light.GetPosition() / 2.0f);
-    return std::cos(Radians(light.GetOuterAngle())) < glm::dot(lightDirection, lightToPoint);
-}
-
-bool QuadInLightCone(const Hors::SpotLight& light, const Quad& quad) {
-    for (const auto & vertex: quad.GetVertices()) {
-        if (PointInLightCone(light, vertex.GetPoint())) {
-            return true;
-        }
-    }
-    return false;
-}
-
-std::vector<std::vector<glm::vec4> > ComputeInitialLight(const std::vector<Quad>& quads, const Hors::SpotLight& light) {
-    std::vector<std::vector<glm::vec4> > initialLight(quads.size());
-    for (auto & initLine : initialLight) {
-        initLine.assign(quads.size(), glm::vec4(0));
-    }
-    const auto samples = GenerateRandomSamples(20);
-    for (uint i = 0; i < quads.size(); ++i) {
-        if (!QuadInLightCone(light, quads[i])) {
-            continue;
-        }
-        for (uint j = 0; j < samples.size(); ++j) {
-            const auto sample = quads[i].GetSample(samples[j]);
-            if (!PointInLightCone(light, sample)) {
-                continue;
-            }
-            if (glm::dot(quads[i].GetNormal(), glm::vec4(light.GetPosition(), 1.0f) - sample) < 1e-9f) {
-                continue;
-            }
-            int nearestHitQuad = -1;
-            float hitCoef = 0;
-            for (uint k = 0; k < quads.size(); ++k) {
-                if (k == i) {
-                    continue;
-                }
-                const float t = quads[k].GetHitVectorCoef(sample, glm::vec4(light.GetPosition(), 1));
-                if (std::isnan(t) || t <= 0) {
-                    continue;
-                }
-                const auto virtualEndPoint = sample + (glm::vec4(light.GetPosition(), 1) - sample) * t * 2.0f;
-                if (!quads[k].CheckIntersectionWithVector(sample, virtualEndPoint)) {
-                    continue;
-                }
-//                std::cout << t << std::endl;
-                if (t <= 1) {
-                    nearestHitQuad = -1;
-                    break;
-                }
-                if (nearestHitQuad == -1 || hitCoef > t) {
-                    hitCoef = t;
-                    nearestHitQuad = k;
-                }
-            }
-            if (nearestHitQuad != -1) {
-                initialLight[nearestHitQuad][i] += glm::vec4(light.GetColor(), 1)
-                    / static_cast<float>(samples.size())
-                    / quads[i].GetSquare()
-                    * light.GetMultiplier();// * 150.f;
-//                    * glm::dot(quads[i].GetNormal(), glm::normalize(glm::vec4(light.GetPosition(), 1) - sample));
-            }
-        }
-    }
-    return initialLight;
-}
-
 
 #define CHECK_EMBREE \
 { \
@@ -290,33 +221,34 @@ std::vector<std::vector<glm::vec4> > ComputeInitialLight(const std::vector<Quad>
 class EmbreeFFJob {
     RTCDevice Device;
     RTCScene Scene;
-    RTCGeometry Geometry;
-    RTCBuffer IndicesBuffer, PointsBuffer;
     const std::vector<Quad>& Quads;
     std::vector<std::vector<float> > FF;
     RTCIntersectContext IntersectionContext;
 public:
     EmbreeFFJob(
         const std::vector<Quad>& quads,
-        const std::vector<glm::vec4>& points,
-        const std::vector<uint>& indices
+        const std::vector<std::vector<glm::vec4> >& points,
+        const std::vector<std::vector<uint> >& indices
     ): Quads(quads) {
         Device = rtcNewDevice(""); CHECK_EMBREE
         Scene = rtcNewScene(Device); CHECK_EMBREE
-        Geometry = rtcNewGeometry(Device, RTC_GEOMETRY_TYPE_TRIANGLE); CHECK_EMBREE
-        IndicesBuffer = rtcNewSharedBuffer(
-            Device,
-            reinterpret_cast<void*>(const_cast<unsigned *>(indices.data())),
-            indices.size() * sizeof(indices[0])); CHECK_EMBREE
-        PointsBuffer = rtcNewSharedBuffer(
-            Device,
-            reinterpret_cast<void*>(const_cast<glm::vec4*>(points.data())),
-            points.size() * sizeof(points[0])); CHECK_EMBREE
+        for (uint i = 0; i < points.size(); ++i) {
+            RTCGeometry geometry = rtcNewGeometry(Device, RTC_GEOMETRY_TYPE_TRIANGLE); CHECK_EMBREE
+            RTCBuffer indicesBuffer = rtcNewSharedBuffer(
+                Device,
+                reinterpret_cast<void*>(const_cast<unsigned *>(indices[i].data())),
+                indices[i].size() * sizeof(indices[i][0])); CHECK_EMBREE
+            RTCBuffer pointsBuffer = rtcNewSharedBuffer(
+                Device,
+                reinterpret_cast<void*>(const_cast<glm::vec4*>(points[i].data())),
+                points[i].size() * sizeof(points[i][0])); CHECK_EMBREE
 
-        rtcSetGeometryBuffer(Geometry, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3, IndicesBuffer, 0, 0, indices.size() / 3); CHECK_EMBREE
-        rtcSetGeometryBuffer(Geometry, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3, PointsBuffer, 0, sizeof(float), points.size()); CHECK_EMBREE
-        rtcCommitGeometry(Geometry); CHECK_EMBREE
-        rtcAttachGeometry(Scene, Geometry); CHECK_EMBREE
+            rtcSetGeometryBuffer(geometry, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3, indicesBuffer, 0, 0, indices[i].size() / 3); CHECK_EMBREE
+            rtcSetGeometryBuffer(geometry, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3, pointsBuffer, 0, sizeof(float), points[i].size()); CHECK_EMBREE
+            rtcCommitGeometry(geometry); CHECK_EMBREE
+            rtcAttachGeometry(Scene, geometry); CHECK_EMBREE
+            rtcReleaseGeometry(geometry);
+        }
         rtcCommitScene(Scene); CHECK_EMBREE
         rtcInitIntersectContext(&IntersectionContext); CHECK_EMBREE
         IntersectionContext.flags = RTC_INTERSECT_CONTEXT_FLAG_COHERENT;
@@ -324,9 +256,9 @@ public:
     }
 
     ~EmbreeFFJob() {
-        rtcReleaseBuffer(PointsBuffer);
-        rtcReleaseBuffer(IndicesBuffer);
-        rtcReleaseGeometry(Geometry);
+        //TODO: release buffers
+//        rtcReleaseBuffer(PointsBuffer);
+//        rtcReleaseBuffer(IndicesBuffer);
         rtcReleaseScene(Scene);
         rtcReleaseDevice(Device);
     }
@@ -399,8 +331,8 @@ public:
 
 std::vector<std::vector<float> > ComputeFormFactorsEmbree(
     const std::vector<Quad>& quads,
-    const std::vector<glm::vec4>& points,
-    const std::vector<uint>& indices
+    const std::vector<std::vector<glm::vec4> >& points,
+    const std::vector<std::vector<uint> >& indices
 ) {
     EmbreeFFJob job(quads, points, indices);
     return job.Execute();

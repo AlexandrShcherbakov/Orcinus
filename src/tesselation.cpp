@@ -6,6 +6,15 @@
 
 #include <algorithm>
 
+std::vector<Quad> ExtractQuadsFromScene(const std::vector<HydraGeomData>& meshes) {
+    std::vector<Quad> quads;
+    for (auto &mesh : meshes) {
+        auto meshQuads = ExtractQuadsFromScene(mesh);
+        quads.insert(quads.end(), meshQuads.begin(), meshQuads.end());
+    }
+    return quads;
+}
+
 std::vector<Quad> ExtractQuadsFromScene(const HydraGeomData& data) {
     const uint indicesCount = data.getIndicesNumber();
 
@@ -64,20 +73,19 @@ std::vector<Quad> ExtractQuadsFromScene(const HydraGeomData& data) {
         result.emplace_back(Quad(locVertices[0], locVertices[1], locVertices[2], locVertices[3]));
     }
 
-    assert(result.size() == 12);
     return result;
 }
 
-std::vector<Quad> TesselateScene(const std::vector<Quad>& quads, const float MinCellWidth) {
+std::vector<Quad> TessellateScene(const std::vector<Quad> &quads, const float MinCellWidth) {
     std::vector<Quad> result;
     for (auto& quad : quads) {
-        auto subdivision = quad.Tesselate(MinCellWidth);
+        auto subdivision = quad.Tessellate(MinCellWidth);
         result.insert(result.end(), subdivision.begin(), subdivision.end());
     }
     return result;
 }
 
-void SaveTesselation(const std::vector<Quad>& quads, const std::string& path) {
+void SaveTessellation(const std::vector<Quad> &quads, const std::string &path) {
     HydraGeomData scene;
     std::vector<glm::vec4> points;
     std::vector<glm::vec4> normals;
