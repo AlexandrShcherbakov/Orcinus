@@ -14,7 +14,8 @@
 std::vector<glm::vec4> RecomputeColorsForQuadsCPU(
     const std::vector<std::vector<float> > & ff,
     const std::vector<glm::vec4> & colors,
-    const std::vector<glm::vec4> & emission
+    const std::vector<glm::vec4> & emission,
+    int iters = 1
 );
 
 std::vector<std::vector<float> > AdamarProduct(

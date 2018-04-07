@@ -241,7 +241,7 @@ public:
             colorsPerQuad.begin(),
             [&materialColors](const Quad &q) { return materialColors[q.GetMaterialId()]; });
 
-        indirectLight = RecomputeColorsForQuadsCPU(formFactors, colorsPerQuad, emissionPerQuad);
+        indirectLight = RecomputeColorsForQuadsCPU(formFactors, colorsPerQuad, emissionPerQuad, 4);
 
         PrepareBuffers(colorsPerQuad);
     }

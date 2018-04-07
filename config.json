@@ -4,7 +4,7 @@
   "WindowSize": "1600x900",
   "InputFile": "Scenes/CornellBox/scene.vsgf",
   "DataDir": "Scenes/CornellBox2",
-  "LoD": 1,
+  "LoD": 13,
   "ScenePropertiesFile": "Scenes/CornellBox2/statex_00001.xml",
   "RecomputeFormFactors": 0
 }

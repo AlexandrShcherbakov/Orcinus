@@ -8,5 +8,5 @@ in vec4 vertexNormal;
 out vec4 outColor;
 
 void main() {
-    outColor = vertexDiffuseColor;
+    outColor = pow(vertexIndirectLight, vec4(1 / 2.2));
 }

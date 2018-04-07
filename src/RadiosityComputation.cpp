@@ -10,18 +10,25 @@
 std::vector<glm::vec4> RecomputeColorsForQuadsCPU(
     const std::vector<std::vector<float> > & ff,
     const std::vector<glm::vec4> & colors,
-    const std::vector<glm::vec4> & emission
+    const std::vector<glm::vec4> & emission,
+    const int iters
 ) {
     const int THREADS_COUNT = 10;
-    std::vector<glm::vec4> lighting(colors.size());
+    std::vector<glm::vec4> lighting = emission;
+    std::vector<glm::vec4> bounce(colors.size());
+    std::vector<glm::vec4> prevBounce = emission;
+    for (int k = 0; k < iters; ++k) {
 #pragma omp parallel for num_threads(THREADS_COUNT)
-    for (uint i = 0; i < lighting.size(); ++i) {
-        for (uint j = 0; j < colors.size(); ++j) {
-            lighting[i] += emission[j] * ff[i][j];
+        for (uint i = 0; i < lighting.size(); ++i) {
+            for (uint j = 0; j < colors.size(); ++j) {
+                bounce[i] += prevBounce[j] * ff[i][j];
+            }
         }
-    }
-    for (uint i = 0; i < lighting.size(); ++i) {
-        lighting[i] *= colors[i];
+        for (uint i = 0; i < lighting.size(); ++i) {
+            lighting[i] += bounce[i] * colors[i];
+            prevBounce[i] = bounce[i];
+            bounce[i] = glm::vec4(0);
+        }
     }
     return lighting;
 }
