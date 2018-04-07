@@ -169,7 +169,7 @@ public:
         CameraUniformLocation = glGetUniformLocation(Program, "CameraMatrix"); CHECK_GL_ERRORS;
 
         const auto cameras = sceneProperties->GetCameras(Get<Hors::WindowSize>("WindowSize").GetScreenRadio());
-        assert(cameras.size());
+        assert(!cameras.empty());
         MainCamera = cameras[0];
     }
 

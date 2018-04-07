@@ -14,7 +14,7 @@ std::vector<Quad> ExtractQuadsFromScene(const std::vector<HydraGeomData>& meshes
 
 std::vector<Quad> ExtractQuadsFromScene(const HydraGeomData& data);
 
-std::vector<Quad> TessellateScene(const std::vector<Quad> &quads, const float MinCellWidth);
+std::vector<Quad> TessellateScene(const std::vector<Quad> &quads, float MinCellWidth);
 
 void SaveTessellation(const std::vector<Quad> &quads, const std::string &path);
 
