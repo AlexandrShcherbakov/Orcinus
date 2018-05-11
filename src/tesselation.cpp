@@ -55,7 +55,7 @@ std::vector<Quad> ExtractQuadsFromScene(const HydraGeomData& data) {
                 locVertices.erase(locVertices.begin() + j);
             }
         }
-        assert(locVertices.size() == 4);
+//        assert(locVertices.size() == 4);
 
         float maxDist = 0;
         for (uint j = 0; j < locVertices.size(); ++j) {

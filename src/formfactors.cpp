@@ -300,7 +300,7 @@ public:
                 }
 
                 for (uint k = 0; k < rays.size(); k += PACKET_SIZE) {
-                    const int validMask = ~1u;
+                    const int validMask = ~0u;
                     rtcOccluded16(&validMask, Scene, &IntersectionContext, &raysPackets[k / PACKET_SIZE]); CHECK_EMBREE
                 }
 

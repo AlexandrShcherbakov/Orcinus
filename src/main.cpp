@@ -41,7 +41,7 @@ class RadiosityProgram : public Hors::Program {
 
     std::vector<std::vector<float> > LoadFormFactors() {
         std::stringstream ss;
-        ss << Get("FormFactorsDir") << "/" << Get<int>("LoD") << ".bin";
+        ss << Get("DataDir") << "/" << Get("FormFactorsDir") << "/" << Get<int>("LoD") << ".bin";
         uint size;
         ifstream in(ss.str(), ios::in | ios::binary);
         if (Get<bool>("RecomputeFormFactors") || !in.good()) {
@@ -241,7 +241,29 @@ public:
             colorsPerQuad.begin(),
             [&materialColors](const Quad &q) { return materialColors[q.GetMaterialId()]; });
 
-        indirectLight = RecomputeColorsForQuadsCPU(formFactors, colorsPerQuad, emissionPerQuad, 4);
+        const auto clusters = MCL(formFactors);
+        unsigned long maxCluster = 0, minCluster = formFactors.size();
+        for (const auto& cluster: clusters) {
+            maxCluster = std::max(maxCluster, cluster.size());
+            minCluster = std::min(minCluster, cluster.size());
+        }
+        std::cout << "Max cluster size: " << maxCluster << std::endl;
+        std::cout << "Min cluster size: " << minCluster << std::endl;
+        std::cout << "Clusters count: " << clusters.size() << std::endl;
+
+        auto modifiedMatrix = SimplifyMatrixUsingClasters(formFactors, clusters);
+        float mse = 0;
+        float maxAbsoluteError = 0;
+        for (uint i = 0; i < formFactors.size(); ++i) {
+            for (uint j = 0; j < formFactors[i].size(); ++j) {
+                mse += sqr(formFactors[i][j] - modifiedMatrix[i][j]);
+                maxAbsoluteError = std::max(maxAbsoluteError, std::abs(formFactors[i][j] - modifiedMatrix[i][j]));
+            }
+        }
+        std::cout << "MSE: " << mse / sqr(formFactors.size()) << std::endl;
+        std::cout << "Max absolute error: " << maxAbsoluteError << std::endl;
+
+        indirectLight = RecomputeColorsForQuadsCPU(modifiedMatrix, colorsPerQuad, emissionPerQuad, 4);
 
         PrepareBuffers(colorsPerQuad);
     }

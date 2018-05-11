@@ -24,4 +24,13 @@ std::vector<std::vector<float> > AdamarProduct(
 );
 
 
+std::vector<std::vector<uint> > HierarchicalClusterization(const std::vector<std::vector<float> >& matrix);
+std::vector<std::vector<uint> > RandomClusterization(const std::vector<std::vector<float> >& matrix);
+std::vector<std::vector<uint> > HierarchicalClusterizationSizeRestriction(const std::vector<std::vector<float> >& matrix);
+std::vector<std::vector<float> > SimplifyMatrixUsingClasters(
+    std::vector<std::vector<float> > ff,
+    const std::vector<std::vector<uint> >& clusters
+);
+std::vector<std::vector<uint> > MCL(std::vector<std::vector<float> > matrix);
+
 #endif //ORCINUS_RADIOSITYCOMPUTATION_H
