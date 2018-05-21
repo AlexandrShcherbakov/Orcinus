@@ -3,8 +3,9 @@
   "Title": "Radiosity",
   "WindowSize": "1600x900",
   "InputFile": "Scenes/CornellBox/scene.vsgf",
-  "DataDir": "Scenes/CornellBox2",
-  "LoD": 13,
-  "ScenePropertiesFile": "Scenes/CornellBox2/statex_00001.xml",
-  "RecomputeFormFactors": 0
+  "DataDir": "Scenes/DualCornellBox",
+  "LoD": 2,
+  "ScenePropertiesFile": "Scenes/DualCornellBox/statex_00007.xml",
+  "RecomputeFormFactors": 0,
+  "MaxPatchesCount": 11000
 }

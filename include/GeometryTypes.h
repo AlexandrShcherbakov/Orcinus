@@ -121,11 +121,11 @@ public:
         return Vertices;
     }
 
-    std::vector<Quad> Tessellate(const float cellSize) const {
+    std::vector<Quad> Tessellate(const float minQuadSide) const {
         const auto height = distance(Vertices[0], Vertices[1]);
         const auto width = distance(Vertices[0], Vertices[3]);
-        const auto heightCellsCount = static_cast<uint>(std::round(height / cellSize));
-        const auto widthCellsCount = static_cast<uint>(std::round(width / cellSize));
+        const auto heightCellsCount = static_cast<uint>(std::ceil(height / minQuadSide));
+        const auto widthCellsCount = static_cast<uint>(std::ceil(width / minQuadSide));
         const auto stepHeight = (Vertices[1] - Vertices[0]) / heightCellsCount;
         const auto stepWidth = (Vertices[3] - Vertices[0]) / widthCellsCount;
         std::vector<Quad> result;
@@ -182,12 +182,12 @@ public:
         return Vertices[0].GetNormal();
     }
 
-    float GetSide() const {
-        return distance(Vertices[0], Vertices[1]);
+    float GetMaxSide() const {
+        return std::max(distance(Vertices[0], Vertices[1]), distance(Vertices[1], Vertices[2]));
     }
 
     float GetSquare() const {
-        return sqr(GetSide());
+        return distance(Vertices[0], Vertices[1]) * distance(Vertices[1], Vertices[2]);
     }
 
     void SetNormal(const glm::vec4& normal) {

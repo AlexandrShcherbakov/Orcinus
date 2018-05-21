@@ -38,6 +38,8 @@ class RadiosityProgram : public Hors::Program {
     Hors::GLBuffer pointsBuffer, indirectLightBuffer, diffuseColorBuffer, indicesBuffer;
     Hors::GLBuffer normalsBuffer;
     GLuint runSize = 0;
+    Hors::GLBuffer quadPointsBuffer, quadColorsBuffer, quadIndicesBuffer;
+    GLuint QuadRender;
 
     std::vector<std::vector<float> > LoadFormFactors() {
         std::stringstream ss;
@@ -97,6 +99,9 @@ public:
         std::vector<uint> indices, interpolationValuesCount;
         std::vector<glm::vec4> normalsPerVertex;
 
+        std::vector<glm::vec4> perQuadPositions, perQuadColors;
+        std::vector<uint> perQuadIndices;
+
         for (uint quadNum = 0; quadNum < quads.size(); ++quadNum) {
             const auto quadVertices = quads[quadNum].GetVertices();
             std::array<uint, quadVertices.size()> quadIndices = {};
@@ -123,6 +128,17 @@ public:
             indices.push_back(quadIndices[0]);
             indices.push_back(quadIndices[2]);
             indices.push_back(quadIndices[3]);
+
+            perQuadIndices.push_back(perQuadPositions.size());
+            perQuadIndices.push_back(perQuadPositions.size() + 1);
+            perQuadIndices.push_back(perQuadPositions.size() + 2);
+            perQuadIndices.push_back(perQuadPositions.size());
+            perQuadIndices.push_back(perQuadPositions.size() + 2);
+            perQuadIndices.push_back(perQuadPositions.size() + 3);
+            for (const auto& point: quads[quadNum].GetVertices()) {
+                perQuadPositions.push_back(point.GetPoint());
+                perQuadColors.push_back(colorsPerQuad[quadNum]);
+            }
         }
         for (uint i = 0; i < indirectLightDeviceBuffer.size(); ++i) {
             indirectLightDeviceBuffer[i] /= interpolationValuesCount[i];
@@ -133,6 +149,10 @@ public:
         diffuseColorBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(diffusePerVertex);
         normalsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(normalsPerVertex);
 
+        quadPointsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(perQuadPositions);
+        quadColorsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(perQuadColors);
+        quadIndicesBuffer = Hors::GenAndFillBuffer<GL_ELEMENT_ARRAY_BUFFER>(perQuadIndices);
+
         indicesBuffer = Hors::GenAndFillBuffer<GL_ELEMENT_ARRAY_BUFFER>(indices);
         runSize = static_cast<GLuint>(indices.size());
 
@@ -141,32 +161,54 @@ public:
             Hors::ReadAndCompileShader("shaders/Radiosity.frag", GL_FRAGMENT_SHADER)
         );
 
-        glUseProgram(Program); CHECK_GL_ERRORS;
+        QuadRender = Hors::CompileShaderProgram(
+            Hors::ReadAndCompileShader("shaders/QuadRender.vert", GL_VERTEX_SHADER),
+            Hors::ReadAndCompileShader("shaders/QuadRender.frag", GL_FRAGMENT_SHADER)
+        );
 
-        GLuint VAO;
-        glGenVertexArrays(1, &VAO); CHECK_GL_ERRORS;
-        glBindVertexArray(VAO); CHECK_GL_ERRORS;
+        glUseProgram(QuadRender); CHECK_GL_ERRORS;
 
-        glBindBuffer(GL_ARRAY_BUFFER, *pointsBuffer); CHECK_GL_ERRORS;
+        GLuint QuadVAO;
+        glGenVertexArrays(1, &QuadVAO); CHECK_GL_ERRORS;
+        glBindVertexArray(QuadVAO); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_ARRAY_BUFFER, *quadPointsBuffer); CHECK_GL_ERRORS;
         glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
         glEnableVertexAttribArray(0); CHECK_GL_ERRORS;
 
-        glBindBuffer(GL_ARRAY_BUFFER, *indirectLightBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_ARRAY_BUFFER, *quadColorsBuffer); CHECK_GL_ERRORS;
         glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
         glEnableVertexAttribArray(1); CHECK_GL_ERRORS;
 
-        glBindBuffer(GL_ARRAY_BUFFER, *diffuseColorBuffer); CHECK_GL_ERRORS;
-        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
-        glEnableVertexAttribArray(2); CHECK_GL_ERRORS;
-
-        glBindBuffer(GL_ARRAY_BUFFER, *normalsBuffer); CHECK_GL_ERRORS;
-        glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
-        glEnableVertexAttribArray(3); CHECK_GL_ERRORS;
-
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *indicesBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *quadIndicesBuffer); CHECK_GL_ERRORS;
         glEnable(GL_DEPTH_TEST); CHECK_GL_ERRORS;
 
-        CameraUniformLocation = glGetUniformLocation(Program, "CameraMatrix"); CHECK_GL_ERRORS;
+//        glUseProgram(Program); CHECK_GL_ERRORS;
+//
+//        GLuint VAO;
+//        glGenVertexArrays(1, &VAO); CHECK_GL_ERRORS;
+//        glBindVertexArray(VAO); CHECK_GL_ERRORS;
+//
+//        glBindBuffer(GL_ARRAY_BUFFER, *pointsBuffer); CHECK_GL_ERRORS;
+//        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
+//        glEnableVertexAttribArray(0); CHECK_GL_ERRORS;
+//
+//        glBindBuffer(GL_ARRAY_BUFFER, *indirectLightBuffer); CHECK_GL_ERRORS;
+//        glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
+//        glEnableVertexAttribArray(1); CHECK_GL_ERRORS;
+//
+//        glBindBuffer(GL_ARRAY_BUFFER, *diffuseColorBuffer); CHECK_GL_ERRORS;
+//        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
+//        glEnableVertexAttribArray(2); CHECK_GL_ERRORS;
+//
+//        glBindBuffer(GL_ARRAY_BUFFER, *normalsBuffer); CHECK_GL_ERRORS;
+//        glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
+//        glEnableVertexAttribArray(3); CHECK_GL_ERRORS;
+//
+//        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *indicesBuffer); CHECK_GL_ERRORS;
+//        glEnable(GL_DEPTH_TEST); CHECK_GL_ERRORS;
+//
+//        CameraUniformLocation = glGetUniformLocation(Program, "CameraMatrix"); CHECK_GL_ERRORS;
 
         const auto cameras = sceneProperties->GetCameras(Get<Hors::WindowSize>("WindowSize").GetScreenRadio());
         assert(!cameras.empty());
@@ -241,7 +283,7 @@ public:
             colorsPerQuad.begin(),
             [&materialColors](const Quad &q) { return materialColors[q.GetMaterialId()]; });
 
-        const auto clusters = MCL(formFactors);
+        const auto clusters = HierarchicalClusterizationErrorBased(formFactors);
         unsigned long maxCluster = 0, minCluster = formFactors.size();
         for (const auto& cluster: clusters) {
             maxCluster = std::max(maxCluster, cluster.size());
@@ -265,15 +307,26 @@ public:
 
         indirectLight = RecomputeColorsForQuadsCPU(modifiedMatrix, colorsPerQuad, emissionPerQuad, 4);
 
-        PrepareBuffers(colorsPerQuad);
+        std::vector<glm::vec4> quadClusterColors(quads.size());
+        for (const auto& cluster : clusters) {
+            const glm::vec4 clusterColor = Hors::GenRandomColor();
+            for (const auto quadId: cluster) {
+                quadClusterColors[quadId] = clusterColor;
+            }
+        }
+
+        PrepareBuffers(quadClusterColors);
     }
 
     void RenderFunction() final {
+        glUseProgram(QuadRender); CHECK_GL_ERRORS;
+        Hors::SetUniform(QuadRender, "CameraMatrix", MainCamera.GetMatrix());
         glClearColor(0, 0, 0, 0); CHECK_GL_ERRORS;
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); CHECK_GL_ERRORS;
-        glUniformMatrix4fv(CameraUniformLocation, 1, GL_FALSE, glm::value_ptr(MainCamera.GetMatrix())); CHECK_GL_ERRORS;
+//        glUniformMatrix4fv(CameraUniformLocation, 1, GL_FALSE, glm::value_ptr(MainCamera.GetMatrix())); CHECK_GL_ERRORS;
 //        Hors::SetUniform(Program, "cameraPosition", glm::vec4(MainCamera.GetPosition(), 1)); CHECK_GL_ERRORS;
-        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(runSize), GL_UNSIGNED_INT, nullptr); CHECK_GL_ERRORS;
+//        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(runSize), GL_UNSIGNED_INT, nullptr); CHECK_GL_ERRORS;
+        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(quads.size() * 6), GL_UNSIGNED_INT, nullptr); CHECK_GL_ERRORS;
         glFinish(); CHECK_GL_ERRORS;
         glutSwapBuffers();
     }

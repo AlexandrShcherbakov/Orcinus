@@ -13,6 +13,7 @@ include_directories("include")
 
 if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
     link_directories("~/InpharkhLib/Hors/cmake-build-debug")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0")
 else()
     link_directories("~/InpharkhLib/Hors/build")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")

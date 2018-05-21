@@ -133,7 +133,7 @@ std::vector<Quad> FilterQuadsForChecking(const uint quadIdx1, const uint quadIdx
     const glm::vec4 line4 = quads[quadIdx2].GetSample(glm::vec2(0.5, 0.5)) - vecBegin;
     const glm::vec3 line = {line4.x, line4.y, line4.z};
     const float lineLength = glm::length(line);
-    const float thresholdDist = quads[0].GetSide() * std::sqrt(2.f);
+    const float thresholdDist = quads[0].GetMaxSide() * std::sqrt(2.f);
 
     std::vector<Quad> result;
     for (uint i = 0; i < quads.size(); ++i) {
@@ -313,7 +313,7 @@ public:
                         const float cosTheta1 = std::max(glm::dot(Quads[i].GetNormal(), glm::normalize(rays[k + l].second)), 0.0f);
                         const float cosTheta2 = std::max(glm::dot(Quads[j].GetNormal(), -glm::normalize(rays[k + l].second)), 0.0f);
                         const float sampleValue = cosTheta1 * cosTheta2 / sqr(rayLength);
-                        if (sampleValue < 0.5 * sqr(samples.size()) * static_cast<float>(M_PI) * Quads[i].GetSquare()) {
+                        if (sampleValue < 0.5 * sqr(samples.size()) * static_cast<float>(M_PI)) {
                             visibilityCount++;
                             samplesSum += sampleValue;
                         }
@@ -321,7 +321,9 @@ public:
                 }
 
                 if (visibilityCount) {
-                    FF[i][j] = FF[j][i] = samplesSum / visibilityCount / static_cast<float>(M_PI) * Quads[i].GetSquare();
+                    FF[i][j] = FF[j][i] = samplesSum / visibilityCount / static_cast<float>(M_PI) * Quads[i].GetSquare() * Quads[j].GetSquare();
+                    FF[i][j] /= Quads[i].GetSquare();
+                    FF[j][i] /= Quads[j].GetSquare();
                 }
             }
         }

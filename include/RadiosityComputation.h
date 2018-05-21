@@ -32,5 +32,6 @@ std::vector<std::vector<float> > SimplifyMatrixUsingClasters(
     const std::vector<std::vector<uint> >& clusters
 );
 std::vector<std::vector<uint> > MCL(std::vector<std::vector<float> > matrix);
+std::vector<std::vector<uint> > HierarchicalClusterizationErrorBased(const std::vector<std::vector<float> >& matrix);
 
 #endif //ORCINUS_RADIOSITYCOMPUTATION_H

@@ -55,7 +55,7 @@ std::vector<Quad> ExtractQuadsFromScene(const HydraGeomData& data) {
                 locVertices.erase(locVertices.begin() + j);
             }
         }
-//        assert(locVertices.size() == 4);
+        assert(locVertices.size() % 4 == 0);
 
         float maxDist = 0;
         for (uint j = 0; j < locVertices.size(); ++j) {
@@ -70,7 +70,9 @@ std::vector<Quad> ExtractQuadsFromScene(const HydraGeomData& data) {
                 break;
             }
         }
-        result.emplace_back(Quad(locVertices[0], locVertices[1], locVertices[2], locVertices[3]));
+        for (uint k = 0; k < locVertices.size(); k += 4) {
+            result.emplace_back(Quad(locVertices[k + 0], locVertices[k + 1], locVertices[k + 2], locVertices[k + 3]));
+        }
     }
 
     return result;
