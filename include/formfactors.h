@@ -18,7 +18,7 @@ std::vector<std::vector<float> > ComputeFormFactors(
     bool antiradiance=false
 );
 
-std::vector<std::vector<float> > ComputeFormFactorsEmbree(
+std::vector<std::map<uint, float> > ComputeFormFactorsEmbree(
     const std::vector<Quad>& quads,
     const std::vector<std::vector<glm::vec4> >& points,
     const std::vector<std::vector<uint> >& indices

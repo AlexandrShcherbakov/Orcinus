@@ -222,7 +222,7 @@ class EmbreeFFJob {
     RTCDevice Device;
     RTCScene Scene;
     const std::vector<Quad>& Quads;
-    std::vector<std::vector<float> > FF;
+    std::vector<std::map<uint, float> > FF;
     RTCIntersectContext IntersectionContext;
 public:
     EmbreeFFJob(
@@ -263,15 +263,12 @@ public:
         rtcReleaseDevice(Device);
     }
 
-    std::vector<std::vector<float> > Execute() {
+    std::vector<std::map<uint, float> > Execute() {
         FF.resize(Quads.size());
-        for (auto &ff : FF) {
-            ff.assign(Quads.size(), 0);
-        }
         const uint PACKET_SIZE = 16;
         const auto samples = GenerateRandomSamples(16);
         for (uint i = 0; i < FF.size(); ++i) {
-            for (uint j = i + 1; j < FF[i].size(); ++j) {
+            for (uint j = i + 1; j < FF.size(); ++j) {
                 std::vector<std::pair<glm::vec4, glm::vec4> > rays;
                 for (const auto firstQuadSample : samples) {
                     const auto sample1 = Quads[i].GetSample(firstQuadSample);
@@ -320,10 +317,10 @@ public:
                     }
                 }
 
-                if (visibilityCount) {
-                    FF[i][j] = FF[j][i] = samplesSum / visibilityCount / static_cast<float>(M_PI) * Quads[i].GetSquare() * Quads[j].GetSquare();
-                    FF[i][j] /= Quads[i].GetSquare();
-                    FF[j][i] /= Quads[j].GetSquare();
+                if (visibilityCount && samplesSum) {
+                    float value = samplesSum / visibilityCount / static_cast<float>(M_PI) * Quads[i].GetSquare() * Quads[j].GetSquare();
+                    FF[i][j] = value / Quads[i].GetSquare();
+                    FF[j][i] = value / Quads[j].GetSquare();
                 }
             }
         }
@@ -331,7 +328,7 @@ public:
     }
 };
 
-std::vector<std::vector<float> > ComputeFormFactorsEmbree(
+std::vector<std::map<uint, float> > ComputeFormFactorsEmbree(
     const std::vector<Quad>& quads,
     const std::vector<std::vector<glm::vec4> >& points,
     const std::vector<std::vector<uint> >& indices

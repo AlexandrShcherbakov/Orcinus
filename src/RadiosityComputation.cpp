@@ -12,7 +12,7 @@
 
 
 std::vector<glm::vec4> RecomputeColorsForQuadsCPU(
-    const std::vector<std::vector<float> > & ff,
+    const std::vector<std::map<uint, float> > & ff,
     const std::vector<glm::vec4> & colors,
     const std::vector<glm::vec4> & emission,
     const int iters
@@ -24,8 +24,8 @@ std::vector<glm::vec4> RecomputeColorsForQuadsCPU(
     for (int k = 0; k < iters; ++k) {
 #pragma omp parallel for num_threads(THREADS_COUNT)
         for (uint i = 0; i < lighting.size(); ++i) {
-            for (uint j = 0; j < colors.size(); ++j) {
-                bounce[i] += prevBounce[j] * ff[i][j];
+            for (const auto& ffItem: ff[i]) {
+                bounce[i] += prevBounce[ffItem.first] * ffItem.second;
             }
         }
         for (uint i = 0; i < lighting.size(); ++i) {
@@ -92,12 +92,19 @@ bool UnionSets(std::vector<uint>& parents, std::vector<uint>& rang, std::vector<
     return false;
 }
 
-std::vector<std::vector<uint> > HierarchicalClusterization(const std::vector<std::vector<float> >& matrix) {
+static float GetFFValue(const std::vector<std::map<uint, float> >& matrix, const uint i, const uint j) {
+    if (matrix[i].count(j))
+        return matrix[i].at(j);
+    return 0;
+}
+
+std::vector<std::vector<uint> > HierarchicalClusterization(const std::vector<std::map<uint, float> >& matrix) {
     std::vector<std::tuple<float, uint, uint> > matrixValues;
     for (uint j = 0; j < matrix.size(); ++j) {
-        for (uint i = j + 1; i < matrix[j].size(); ++i) {
-            if (matrix[j][i]) {
-                matrixValues.emplace_back(std::make_tuple(matrix[j][i], j, i));
+        for (uint i = j + 1; i < matrix.size(); ++i) {
+            const auto value = GetFFValue(matrix, j, i);
+            if (value) {
+                matrixValues.emplace_back(std::make_tuple(value, j, i));
             }
         }
     }

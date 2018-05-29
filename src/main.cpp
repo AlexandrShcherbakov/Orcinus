@@ -41,7 +41,7 @@ class RadiosityProgram : public Hors::Program {
     Hors::GLBuffer quadPointsBuffer, quadColorsBuffer, quadIndicesBuffer;
     GLuint QuadRender;
 
-    std::vector<std::vector<float> > LoadFormFactors() {
+    std::vector<std::map<uint, float> > LoadFormFactors() {
         std::stringstream ss;
         ss << Get("DataDir") << "/" << Get("FormFactorsDir") << "/" << Get<int>("LoD") << ".bin";
         uint size;
@@ -53,6 +53,8 @@ class RadiosityProgram : public Hors::Program {
             size = static_cast<uint>(ff.size());
             out.write(reinterpret_cast<char*>(&size), sizeof(size));
             for (auto& row: ff) {
+                const uint rowSize = row.size();
+                out.write(reinterpret_cast<const char*>(&rowSize), sizeof(rowSize));
                 for (auto& item: row) {
                     out.write(reinterpret_cast<char*>(&item), sizeof(item));
                 }
@@ -61,13 +63,16 @@ class RadiosityProgram : public Hors::Program {
             out.close();
             return ff;
         }
-        std::vector<std::vector<float> > ff;
+        std::vector<std::map<uint, float> > ff;
         in.read(reinterpret_cast<char*>(&size), sizeof(size));
         ff.resize(size);
         for (auto& row: ff) {
-            row.resize(size);
-            for (auto& item: row) {
+            uint rowSize;
+            in.read(reinterpret_cast<char*>(&rowSize), sizeof(rowSize));
+            std::pair<uint, float> item;
+            for (uint i = 0; i < rowSize; ++i) {
                 in.read(reinterpret_cast<char*>(&item), sizeof(item));
+                row[item.first] = item.second;
             }
         }
         in.close();
@@ -215,7 +220,7 @@ public:
         MainCamera = cameras[0];
     }
 
-    std::vector<std::vector<float> > FormFactorComputationEmbree() {
+    std::vector<std::map<uint, float> > FormFactorComputationEmbree() {
         std::vector<std::vector<glm::vec4> > points;
         std::vector<std::vector<uint> > indices;
         for (auto &SceneMesh : SceneMeshes) {
@@ -283,7 +288,7 @@ public:
             colorsPerQuad.begin(),
             [&materialColors](const Quad &q) { return materialColors[q.GetMaterialId()]; });
 
-        const auto clusters = HierarchicalClusterizationErrorBased(formFactors);
+        const auto clusters = HierarchicalClusterization(formFactors);
         unsigned long maxCluster = 0, minCluster = formFactors.size();
         for (const auto& cluster: clusters) {
             maxCluster = std::max(maxCluster, cluster.size());
@@ -292,20 +297,20 @@ public:
         std::cout << "Max cluster size: " << maxCluster << std::endl;
         std::cout << "Min cluster size: " << minCluster << std::endl;
         std::cout << "Clusters count: " << clusters.size() << std::endl;
+//
+//        auto modifiedMatrix = SimplifyMatrixUsingClasters(formFactors, clusters);
+//        float mse = 0;
+//        float maxAbsoluteError = 0;
+//        for (uint i = 0; i < formFactors.size(); ++i) {
+//            for (uint j = 0; j < formFactors[i].size(); ++j) {
+//                mse += sqr(formFactors[i][j] - modifiedMatrix[i][j]);
+//                maxAbsoluteError = std::max(maxAbsoluteError, std::abs(formFactors[i][j] - modifiedMatrix[i][j]));
+//            }
+//        }
+//        std::cout << "MSE: " << mse / sqr(formFactors.size()) << std::endl;
+//        std::cout << "Max absolute error: " << maxAbsoluteError << std::endl;
 
-        auto modifiedMatrix = SimplifyMatrixUsingClasters(formFactors, clusters);
-        float mse = 0;
-        float maxAbsoluteError = 0;
-        for (uint i = 0; i < formFactors.size(); ++i) {
-            for (uint j = 0; j < formFactors[i].size(); ++j) {
-                mse += sqr(formFactors[i][j] - modifiedMatrix[i][j]);
-                maxAbsoluteError = std::max(maxAbsoluteError, std::abs(formFactors[i][j] - modifiedMatrix[i][j]));
-            }
-        }
-        std::cout << "MSE: " << mse / sqr(formFactors.size()) << std::endl;
-        std::cout << "Max absolute error: " << maxAbsoluteError << std::endl;
-
-        indirectLight = RecomputeColorsForQuadsCPU(modifiedMatrix, colorsPerQuad, emissionPerQuad, 4);
+        indirectLight = RecomputeColorsForQuadsCPU(formFactors, colorsPerQuad, emissionPerQuad, 4);
 
         std::vector<glm::vec4> quadClusterColors(quads.size());
         for (const auto& cluster : clusters) {
@@ -314,8 +319,7 @@ public:
                 quadClusterColors[quadId] = clusterColor;
             }
         }
-
-        PrepareBuffers(quadClusterColors);
+        PrepareBuffers(indirectLight);
     }
 
     void RenderFunction() final {
