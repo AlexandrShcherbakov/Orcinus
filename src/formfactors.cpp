@@ -336,3 +336,161 @@ std::vector<std::map<uint, float> > ComputeFormFactorsEmbree(
     EmbreeFFJob job(quads, points, indices);
     return job.Execute();
 }
+
+class EmbreeHierarchicalFFJob {
+    RTCDevice Device;
+    RTCScene Scene;
+    QuadsContainer& Quads;
+    std::vector<std::map<int, float> > FF;
+    RTCIntersectContext IntersectionContext;
+    const float EPS = 1e-1;
+    const int MAX_DEPTH = 3;
+
+    float GetTwoQuadsFF(const int idx1, const int idx2) {
+        const uint PACKET_SIZE = 16;
+        const auto samples = GenerateRandomSamples(16);
+
+        std::vector<std::pair<glm::vec4, glm::vec4> > rays;
+        for (const auto firstQuadSample : samples) {
+            const auto sample1 = Quads.GetQuad(idx1).GetSample(firstQuadSample);
+            for (auto secondQuadSample : samples) {
+                rays.emplace_back(std::make_pair(sample1, Quads.GetQuad(idx2).GetSample(secondQuadSample) - sample1));
+            }
+        }
+        uint visibilityCount = 0;
+        float samplesSum = 0;
+        const float BIAS = 1e-5f;
+        std::vector<RTCRay16> raysPackets(rays.size() / PACKET_SIZE);
+        for (uint k = 0; k < rays.size(); k += PACKET_SIZE) {
+            for (uint l = 0; l < PACKET_SIZE; ++l) {
+                raysPackets[k / PACKET_SIZE].org_x[l] = rays[k + l].first.x;
+                raysPackets[k / PACKET_SIZE].org_y[l] = rays[k + l].first.y;
+                raysPackets[k / PACKET_SIZE].org_z[l] = rays[k + l].first.z;
+                raysPackets[k / PACKET_SIZE].tnear[l] = BIAS;
+                raysPackets[k / PACKET_SIZE].dir_x[l] = rays[k + l].second.x;
+                raysPackets[k / PACKET_SIZE].dir_y[l] = rays[k + l].second.y;
+                raysPackets[k / PACKET_SIZE].dir_z[l] = rays[k + l].second.z;
+                raysPackets[k / PACKET_SIZE].tfar[l] = glm::length(rays[k + l].second) - BIAS;
+                raysPackets[k / PACKET_SIZE].id[l] = 0;
+                raysPackets[k / PACKET_SIZE].mask[l] = 0;
+                raysPackets[k / PACKET_SIZE].time[l] = 0;
+            }
+        }
+
+        for (uint k = 0; k < rays.size(); k += PACKET_SIZE) {
+            const int validMask = ~0u;
+            rtcOccluded16(&validMask, Scene, &IntersectionContext, &raysPackets[k / PACKET_SIZE]); CHECK_EMBREE
+        }
+
+        for (uint k = 0; k < rays.size(); k += PACKET_SIZE) {
+            for (uint l = 0; l < PACKET_SIZE; ++l) {
+                if (std::isinf(raysPackets[k / PACKET_SIZE].tfar[l])) {
+                    continue;
+                }
+                const float rayLength = glm::length(rays[k + l].second);
+                const float cosTheta1 = std::max(glm::dot(Quads.GetQuad(idx1).GetNormal(), glm::normalize(rays[k + l].second)), 0.0f);
+                const float cosTheta2 = std::max(glm::dot(Quads.GetQuad(idx2).GetNormal(), -glm::normalize(rays[k + l].second)), 0.0f);
+                const float sampleValue = cosTheta1 * cosTheta2 / sqr(rayLength);
+                if (sampleValue < 0.5 * sqr(samples.size()) * static_cast<float>(M_PI)) {
+                    visibilityCount++;
+                    samplesSum += sampleValue;
+                }
+            }
+        }
+
+        if (visibilityCount && samplesSum) {
+            return samplesSum / visibilityCount / static_cast<float>(M_PI) * Quads.GetQuad(idx1).GetSquare() * Quads.GetQuad(idx2).GetSquare();
+        }
+        return 0;
+    }
+
+    void ProcessTwoQuads(const int idx1, const int idx2, const int depth1, const int depth2) {
+        const float ff = GetTwoQuadsFF(idx1, idx2);
+        if (!ff) {
+            return;
+        }
+        const auto ch1 = Quads.GetChildren(idx1);
+        const auto ch2 = Quads.GetChildren(idx2);
+        if (depth1) {
+            const auto ff11_2 = GetTwoQuadsFF(ch1.first, idx2) / Quads.GetQuad(ch1.first).GetSquare();
+            const auto ff12_2 = GetTwoQuadsFF(ch1.second, idx2) / Quads.GetQuad(ch1.second).GetSquare();
+            if (std::abs(ff - ff11_2 - ff12_2) > EPS) {
+                ProcessTwoQuads(ch1.first, idx2, depth1 - 1, depth2);
+                ProcessTwoQuads(ch1.second, idx2, depth1 - 1, depth2);
+                return;
+            }
+        }
+        if (depth2) {
+            const auto ff1_21 = GetTwoQuadsFF(idx1, ch2.first) / Quads.GetQuad(ch2.first).GetSquare();
+            const auto ff1_22 = GetTwoQuadsFF(idx1, ch2.second) / Quads.GetQuad(ch2.second).GetSquare();
+            if (std::abs(ff - ff1_21 - ff1_22) > EPS) {
+                ProcessTwoQuads(idx1, ch2.first, depth1, depth2 - 1);
+                ProcessTwoQuads(idx1, ch2.second, depth1, depth2 - 1);
+                return;
+            }
+        }
+        if (static_cast<int>(FF.size()) <= idx1 || static_cast<int>(FF.size()) <= idx2) {
+            FF.resize(std::max(idx1, idx2) + 1);
+        }
+        FF[idx1][idx2] = ff / Quads.GetQuad(idx1).GetSquare();
+        FF[idx2][idx1] = ff / Quads.GetQuad(idx2).GetSquare();
+    }
+
+public:
+    EmbreeHierarchicalFFJob(
+        QuadsContainer& quads,
+        const std::vector<std::vector<glm::vec4> >& points,
+        const std::vector<std::vector<uint> >& indices
+    ): Quads(quads) {
+        Device = rtcNewDevice(""); CHECK_EMBREE
+        Scene = rtcNewScene(Device); CHECK_EMBREE
+        for (uint i = 0; i < points.size(); ++i) {
+            RTCGeometry geometry = rtcNewGeometry(Device, RTC_GEOMETRY_TYPE_TRIANGLE); CHECK_EMBREE
+            RTCBuffer indicesBuffer = rtcNewSharedBuffer(
+                Device,
+                reinterpret_cast<void*>(const_cast<unsigned *>(indices[i].data())),
+                indices[i].size() * sizeof(indices[i][0])); CHECK_EMBREE
+            RTCBuffer pointsBuffer = rtcNewSharedBuffer(
+                Device,
+                reinterpret_cast<void*>(const_cast<glm::vec4*>(points[i].data())),
+                points[i].size() * sizeof(points[i][0])); CHECK_EMBREE
+
+            rtcSetGeometryBuffer(geometry, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3, indicesBuffer, 0, 0, indices[i].size() / 3); CHECK_EMBREE
+            rtcSetGeometryBuffer(geometry, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3, pointsBuffer, 0, sizeof(float), points[i].size()); CHECK_EMBREE
+            rtcCommitGeometry(geometry); CHECK_EMBREE
+            rtcAttachGeometry(Scene, geometry); CHECK_EMBREE
+            rtcReleaseGeometry(geometry);
+        }
+        rtcCommitScene(Scene); CHECK_EMBREE
+        rtcInitIntersectContext(&IntersectionContext); CHECK_EMBREE
+        IntersectionContext.flags = RTC_INTERSECT_CONTEXT_FLAG_COHERENT;
+        IntersectionContext.instID[0] = 0;
+    }
+
+    ~EmbreeHierarchicalFFJob() {
+        //TODO: release buffers
+//        rtcReleaseBuffer(PointsBuffer);
+//        rtcReleaseBuffer(IndicesBuffer);
+        rtcReleaseScene(Scene);
+        rtcReleaseDevice(Device);
+    }
+
+    std::vector<std::map<int, float> > Execute() {
+        const int mainQuadsCount = Quads.GetSize();
+        for (int i = 0; i < mainQuadsCount; ++i) {
+            for (int j = i + 1; j < mainQuadsCount; ++j) {
+                ProcessTwoQuads(i, j, MAX_DEPTH, MAX_DEPTH);
+            }
+        }
+        return FF;
+    }
+};
+
+std::vector<std::map<int, float> > ComputeFormFactorsEmbree(
+    QuadsContainer& quads,
+    const std::vector<std::vector<glm::vec4> >& points,
+    const std::vector<std::vector<uint> >& indices
+) {
+    EmbreeHierarchicalFFJob job(quads, points, indices);
+    return job.Execute();
+}

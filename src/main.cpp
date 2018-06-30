@@ -238,6 +238,24 @@ public:
         return ComputeFormFactorsEmbree(quads, points, indices);
     }
 
+    std::vector<std::map<int, float> > FormFactorComputationEmbree(QuadsContainer& quadsHierarchy) {
+        std::vector<std::vector<glm::vec4> > points;
+        std::vector<std::vector<uint> > indices;
+        for (auto &SceneMesh : SceneMeshes) {
+            std::vector<glm::vec4> meshPoints(SceneMesh.getVerticesNumber());
+            for (uint k = 0; k < points.size(); ++k) {
+                meshPoints[k] = glm::make_vec4(SceneMesh.getVertexPositionsFloat4Array() + k * 4);
+            }
+            std::vector<uint> meshIndices(
+                SceneMesh.getTriangleVertexIndicesArray(),
+                SceneMesh.getTriangleVertexIndicesArray() + SceneMesh.getIndicesNumber()
+            );
+            points.emplace_back(meshPoints);
+            indices.emplace_back(meshIndices);
+        }
+        return ComputeFormFactorsEmbree(quadsHierarchy, points, indices);
+    }
+
     void Run() final {
         const float MinCellWidth = 0.75f / Get<int>("LoD");
 
@@ -288,38 +306,23 @@ public:
             colorsPerQuad.begin(),
             [&materialColors](const Quad &q) { return materialColors[q.GetMaterialId()]; });
 
-        const auto clusters = HierarchicalClusterization(formFactors);
-        unsigned long maxCluster = 0, minCluster = formFactors.size();
-        for (const auto& cluster: clusters) {
-            maxCluster = std::max(maxCluster, cluster.size());
-            minCluster = std::min(minCluster, cluster.size());
-        }
-        std::cout << "Max cluster size: " << maxCluster << std::endl;
-        std::cout << "Min cluster size: " << minCluster << std::endl;
-        std::cout << "Clusters count: " << clusters.size() << std::endl;
-//
-//        auto modifiedMatrix = SimplifyMatrixUsingClasters(formFactors, clusters);
-//        float mse = 0;
-//        float maxAbsoluteError = 0;
-//        for (uint i = 0; i < formFactors.size(); ++i) {
-//            for (uint j = 0; j < formFactors[i].size(); ++j) {
-//                mse += sqr(formFactors[i][j] - modifiedMatrix[i][j]);
-//                maxAbsoluteError = std::max(maxAbsoluteError, std::abs(formFactors[i][j] - modifiedMatrix[i][j]));
-//            }
-//        }
-//        std::cout << "MSE: " << mse / sqr(formFactors.size()) << std::endl;
-//        std::cout << "Max absolute error: " << maxAbsoluteError << std::endl;
-
         indirectLight = RecomputeColorsForQuadsCPU(formFactors, colorsPerQuad, emissionPerQuad, 4);
 
-        std::vector<glm::vec4> quadClusterColors(quads.size());
-        for (const auto& cluster : clusters) {
-            const glm::vec4 clusterColor = Hors::GenRandomColor();
-            for (const auto quadId: cluster) {
-                quadClusterColors[quadId] = clusterColor;
-            }
-        }
         PrepareBuffers(indirectLight);
+
+
+        const auto globQuads = ExtractQuadsFromScene(SceneMeshes);
+        cout << "Start to compute form-factors for " << globQuads.size() << " quads" << endl;
+        timestamp = time(nullptr);
+        QuadsContainer quadsHierarchy;
+        for (const auto& quad: globQuads) {
+            quadsHierarchy.AddQuad(quad);
+        }
+        auto hierarchicalFF = FormFactorComputationEmbree(quadsHierarchy);
+        cout << "Before compress: " << hierarchicalFF.size() << endl;
+        RemoveUnnecessaryQuads(quadsHierarchy, hierarchicalFF);
+        cout << "After compress: " << hierarchicalFF.size() << endl;
+        cout << "Form-factors hierarchy computation: " << time(nullptr) - timestamp << " seconds" << endl;
     }
 
     void RenderFunction() final {

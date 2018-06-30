@@ -199,6 +199,68 @@ public:
     uint GetMaterialId() const {
         return Vertices[0].GetMaterialNumber();
     }
+
+    std::pair<Quad, Quad> Split() const {
+        if (distance(Vertices[0], Vertices[1]) > distance(Vertices[1], Vertices[2])) {
+            return {
+                {Vertices[0], (Vertices[0] + Vertices[1]) / 2.f, (Vertices[2] + Vertices[3]) / 2.f, Vertices[3]},
+                {(Vertices[0] + Vertices[1]) / 2.f, Vertices[1], Vertices[2], (Vertices[2] + Vertices[3]) / 2.f}
+            };
+        } else {
+            return {
+                {Vertices[0], Vertices[1], (Vertices[1] + Vertices[2]) / 2.f, (Vertices[0] + Vertices[3]) / 2.f},
+                {(Vertices[1] + Vertices[2]) / 2.f, Vertices[2], Vertices[3], (Vertices[0] + Vertices[3]) / 2.f}
+            };
+        }
+    }
+};
+
+class QuadsContainer {
+    std::vector<Quad> Quads;
+    std::vector<std::pair<int, int> > Children;
+
+public:
+    void AddQuad(const Quad& quad) {
+        Quads.push_back(quad);
+        Children.emplace_back(-1, -1);
+    }
+
+    std::pair<int, int> SplitQuad(const int idx) {
+        std::pair<int, int> result = std::make_pair<int, int>(Quads.size(), Quads.size() + 1);
+        const auto newQuads = Quads[idx].Split();
+        AddQuad(newQuads.first);
+        AddQuad(newQuads.second);
+        Children[idx] = result;
+        return result;
+    }
+
+    const Quad& GetQuad(const int idx) {
+        return Quads[idx];
+    }
+
+    int GetSize() const {
+        return Quads.size();
+    }
+
+    bool HasChildren(const int idx) const {
+        return Children[idx].first != -1;
+    }
+
+    std::pair<int, int> GetChildren(const int idx) {
+        if (Children[idx].first < 0) {
+            SplitQuad(idx);
+        }
+        return Children[idx];
+    };
+
+    void SetChildren(const int idx, const std::pair<int, int>& newValue) {
+        Children[idx] = newValue;
+    }
+
+    void RemoveQuad(const int idx) {
+        Quads.erase(Quads.begin() + idx);
+        Children.erase(Children.begin() + idx);
+    }
 };
 
 std::vector<glm::vec2> GenerateRandomSamples(uint samplesNumber);
