@@ -27,7 +27,8 @@ std::vector<std::map<uint, float> > ComputeFormFactorsEmbree(
 std::vector<std::map<int, float> > ComputeFormFactorsEmbree(
     QuadsContainer& quads,
     const std::vector<std::vector<glm::vec4> >& points,
-    const std::vector<std::vector<uint> >& indices
+    const std::vector<std::vector<uint> >& indices,
+    uint maxDepth
 );
 
 #endif //ORCINUS_FORMFACTORS_H

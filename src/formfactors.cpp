@@ -344,7 +344,6 @@ class EmbreeHierarchicalFFJob {
     std::vector<std::map<int, float> > FF;
     RTCIntersectContext IntersectionContext;
     const float EPS = 1e-7;
-    const int MAX_DEPTH = 4;
 
     float GetTwoQuadsFF(const int idx1, const int idx2) {
         const uint PACKET_SIZE = 16;
@@ -475,11 +474,11 @@ public:
         rtcReleaseDevice(Device);
     }
 
-    std::vector<std::map<int, float> > Execute() {
+    std::vector<std::map<int, float> > Execute(const uint maxDepth) {
         const int mainQuadsCount = Quads.GetSize();
         for (int i = 0; i < mainQuadsCount; ++i) {
             for (int j = i + 1; j < mainQuadsCount; ++j) {
-                ProcessTwoQuads(i, j, MAX_DEPTH, MAX_DEPTH);
+                ProcessTwoQuads(i, j, maxDepth, maxDepth);
                 std::cout << "Pair: " << i << ' ' << j << " processed." << std::endl;
             }
         }
@@ -490,8 +489,9 @@ public:
 std::vector<std::map<int, float> > ComputeFormFactorsEmbree(
     QuadsContainer& quads,
     const std::vector<std::vector<glm::vec4> >& points,
-    const std::vector<std::vector<uint> >& indices
+    const std::vector<std::vector<uint> >& indices,
+    const uint maxDepth
 ) {
     EmbreeHierarchicalFFJob job(quads, points, indices);
-    return job.Execute();
+    return job.Execute(maxDepth);
 }

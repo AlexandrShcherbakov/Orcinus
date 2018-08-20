@@ -99,6 +99,7 @@ public:
         AddArgument("FormFactorsDir", "FF", "Directory with form-factors.");
         AddArgument("ScenePropertiesFile", "", "File with scene properties.");
         AddArgument("DataDir", "", "Directory with scene chunks.");
+        AddArgument("MaxHierarchyDepth", 4, "");
     }
 
     void PrepareBuffers(const std::vector<glm::vec4>& colorsPerQuad) {
@@ -367,7 +368,7 @@ public:
             points.emplace_back(meshPoints);
             indices.emplace_back(meshIndices);
         }
-        return ComputeFormFactorsEmbree(quadsHierarchy, points, indices);
+        return ComputeFormFactorsEmbree(quadsHierarchy, points, indices, Get<uint>("MaxHierarchyDepth"));
     }
 
     void NextSplit() {

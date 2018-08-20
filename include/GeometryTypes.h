@@ -226,7 +226,9 @@ public:
     }
 
     std::pair<int, int> SplitQuad(const int idx) {
-        std::pair<int, int> result = std::make_pair<int, int>(Quads.size(), Quads.size() + 1);
+        std::pair<int, int> result = std::make_pair<int, int>(
+            static_cast<int>(Quads.size()), static_cast<int>(Quads.size()) + 1
+        );
         const auto newQuads = Quads[idx].Split();
         AddQuad(newQuads.first);
         AddQuad(newQuads.second);
@@ -239,7 +241,7 @@ public:
     }
 
     int GetSize() const {
-        return Quads.size();
+        return static_cast<int>(Quads.size());
     }
 
     bool HasChildren(const int idx) const {
