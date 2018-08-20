@@ -343,12 +343,12 @@ class EmbreeHierarchicalFFJob {
     QuadsContainer& Quads;
     std::vector<std::map<int, float> > FF;
     RTCIntersectContext IntersectionContext;
-    const float EPS = 1e-1;
-    const int MAX_DEPTH = 3;
+    const float EPS = 1e-7;
+    const int MAX_DEPTH = 4;
 
     float GetTwoQuadsFF(const int idx1, const int idx2) {
         const uint PACKET_SIZE = 16;
-        const auto samples = GenerateRandomSamples(16);
+        const auto samples = GenerateRandomSamples(PACKET_SIZE * 2);
 
         std::vector<std::pair<glm::vec4, glm::vec4> > rays;
         for (const auto firstQuadSample : samples) {
@@ -412,8 +412,8 @@ class EmbreeHierarchicalFFJob {
         const auto ch1 = Quads.GetChildren(idx1);
         const auto ch2 = Quads.GetChildren(idx2);
         if (depth1) {
-            const auto ff11_2 = GetTwoQuadsFF(ch1.first, idx2) / Quads.GetQuad(ch1.first).GetSquare();
-            const auto ff12_2 = GetTwoQuadsFF(ch1.second, idx2) / Quads.GetQuad(ch1.second).GetSquare();
+            const auto ff11_2 = GetTwoQuadsFF(ch1.first, idx2);
+            const auto ff12_2 = GetTwoQuadsFF(ch1.second, idx2);
             if (std::abs(ff - ff11_2 - ff12_2) > EPS) {
                 ProcessTwoQuads(ch1.first, idx2, depth1 - 1, depth2);
                 ProcessTwoQuads(ch1.second, idx2, depth1 - 1, depth2);
@@ -421,8 +421,8 @@ class EmbreeHierarchicalFFJob {
             }
         }
         if (depth2) {
-            const auto ff1_21 = GetTwoQuadsFF(idx1, ch2.first) / Quads.GetQuad(ch2.first).GetSquare();
-            const auto ff1_22 = GetTwoQuadsFF(idx1, ch2.second) / Quads.GetQuad(ch2.second).GetSquare();
+            const auto ff1_21 = GetTwoQuadsFF(idx1, ch2.first);
+            const auto ff1_22 = GetTwoQuadsFF(idx1, ch2.second);
             if (std::abs(ff - ff1_21 - ff1_22) > EPS) {
                 ProcessTwoQuads(idx1, ch2.first, depth1, depth2 - 1);
                 ProcessTwoQuads(idx1, ch2.second, depth1, depth2 - 1);
@@ -480,6 +480,7 @@ public:
         for (int i = 0; i < mainQuadsCount; ++i) {
             for (int j = i + 1; j < mainQuadsCount; ++j) {
                 ProcessTwoQuads(i, j, MAX_DEPTH, MAX_DEPTH);
+                std::cout << "Pair: " << i << ' ' << j << " processed." << std::endl;
             }
         }
         return FF;

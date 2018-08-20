@@ -243,11 +243,19 @@ public:
     }
 
     bool HasChildren(const int idx) const {
-        return Children[idx].first != -1;
+        return Children[idx].first != -1 || Children[idx].second != -1;
+    }
+
+    bool IsFullySplittedNode(const int idx) const {
+        return Children[idx].first != -1 && Children[idx].second != -1;
+    }
+
+    bool IsChildOf(const int child, const int parent) const {
+        return parent != -1 && (parent == child || IsChildOf(child, Children[parent].first) || IsChildOf(child, Children[parent].second));
     }
 
     std::pair<int, int> GetChildren(const int idx) {
-        if (Children[idx].first < 0) {
+        if (Children[idx].first < 0 && Children[idx].second < 0) {
             SplitQuad(idx);
         }
         return Children[idx];
@@ -259,7 +267,26 @@ public:
 
     void RemoveQuad(const int idx) {
         Quads.erase(Quads.begin() + idx);
+        if (Children[idx].first != -1 || Children[idx].second != -1) {
+            exit(1);
+        }
         Children.erase(Children.begin() + idx);
+        for (auto& child: Children) {
+            if (child.first == idx) {
+                child.first = -1;
+            }
+            if (child.second == idx) {
+                child.second = -1;
+            }
+        }
+        for (auto& child: Children) {
+            if (child.first > idx) {
+                --child.first;
+            }
+            if (child.second > idx) {
+                --child.second;
+            }
+        }
     }
 };
 

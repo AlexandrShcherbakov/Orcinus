@@ -42,34 +42,29 @@ void RemoveUnnecessaryQuads(
     std::vector<std::map<int, float> > & ff
 ) {
     int z = 0;
+    for (uint i = quads.GetSize() - 1; i >= ff.size(); --i) {
+        quads.RemoveQuad(i);
+        ++z;
+    }
     for (int i = quads.GetSize() - 1; i >= 0; --i) {
-        z += ff[i].empty() && quads.GetChildren(i).first < 0;
-        if (ff[i].empty() && quads.GetChildren(i).first < 0) {
-            for (int j = 0; j < quads.GetSize(); ++j) {
-                if (!quads.HasChildren(j)) {
-                    continue;
-                }
-                auto children = quads.GetChildren(j);
-                if (children.first > i) {
-                    --children.first;
-                }
-                if (children.second > i) {
-                    --children.second;
-                }
-                quads.SetChildren(j, children);
-            }
-            for (auto &j : ff) {
+        if (ff[i].empty() && !quads.HasChildren(i)) {
+            ++z;
+            quads.RemoveQuad(i);
+            ff.erase(ff.begin() + i);
+            for (auto &ff_row : ff) {
                 std::map<int, float> updated;
-                for (const auto it : j) {
+                for (const auto it : ff_row) {
                     if (it.first > i) {
                         updated[it.first - 1] = it.second;
                     }
                 }
                 for (const auto it : updated) {
-                    j.erase(it.first + 1);
+                    ff_row.erase(it.first + 1);
+                }
+                for (const auto it : updated) {
+                    ff_row[it.first] = it.second;
                 }
             }
-            ff.erase(ff.begin() + i);
         }
     }
     std::cout << z << std::endl;
