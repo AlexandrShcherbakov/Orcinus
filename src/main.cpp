@@ -28,67 +28,102 @@ inline bool vec4Less(const glm::vec4& a, const glm::vec4& b) {
         || (a.z == b.z && (a.w < b.w))))));
 }
 
-template <typename T>
-void ClearVector(std::vector<T>& v) {
-    std::vector<T> tmp;
-    v.swap(tmp);
-}
-
 class RadiosityProgram : public Hors::Program {
     std::vector<HydraGeomData> SceneMeshes;
     std::vector<Quad> quads = {};
     std::unique_ptr<Hors::SceneProperties> sceneProperties = nullptr;
-    std::vector<glm::vec4> indirectLight;
-    GLuint Program;
     std::vector<std::map<int, float> > hierarchicalFF;
-    int baseQuadsCount;
     QuadsContainer quadsHierarchy;
 
-    Hors::GLBuffer pointsBuffer, indirectLightBuffer, diffuseColorBuffer, indicesBuffer;
-    Hors::GLBuffer normalsBuffer;
-    GLuint runSize = 0;
-    Hors::GLBuffer quadPointsBuffer, quadColorsBuffer, quadIndicesBuffer;
+    Hors::GLBuffer quadPointsBuffer, quadColorsBuffer, quadNormalsBuffer;
+    std::vector<Hors::GLBuffer> perMaterialIndices;
+    std::vector<uint> perMaterialQuads;
     GLuint QuadRender;
     std::vector<glm::vec4> perQuadPositions, perQuadColors;
-    std::vector<uint> perQuadIndices;
     std::vector<uint> renderedQuads;
+    std::vector<glm::vec4> quadsNormals;
+    std::vector<glm::vec4> materialsEmission;
+    std::vector<glm::vec4> materialColors;
 
-    std::vector<std::map<uint, float> > LoadFormFactors() {
+    void LoadFormFactorsHierarchy() {
         std::stringstream ss;
-        ss << Get("DataDir") << "/" << Get("FormFactorsDir") << "/" << Get<int>("LoD") << ".bin";
+        ss << Get("DataDir") << "/" << Get("FormFactorsDir") << "/" << Get<int>("MaxHierarchyDepth") << ".bin";
         uint size;
         ifstream in(ss.str(), ios::in | ios::binary);
         if (Get<bool>("RecomputeFormFactors") || !in.good()) {
             assert(!quads.empty());
-            auto ff = FormFactorComputationEmbree();
+            const auto globQuads = ExtractQuadsFromScene(SceneMeshes);
+            cout << "Start to compute form-factors for " << globQuads.size() << " quads" << endl;
+            auto timestamp = time(nullptr);
+            for (const auto& quad: globQuads) {
+                quadsHierarchy.AddQuad(quad);
+            }
+            hierarchicalFF = FormFactorComputationEmbree(quadsHierarchy);
+            std::cout << quadsHierarchy.GetSize() << ' ' << hierarchicalFF.size() << endl;
+            cout << "Before compress: " << hierarchicalFF.size() << endl;
+            RemoveUnnecessaryQuads(quadsHierarchy, hierarchicalFF);
+            cout << "After compress: " << hierarchicalFF.size() << endl;
+            std::cout << quadsHierarchy.GetSize() << ' ' << hierarchicalFF.size() << endl;
+            cout << "Form-factors hierarchy computation: " << time(nullptr) - timestamp << " seconds" << endl;
             ofstream out(ss.str(), ios::out | ios::binary);
-            size = static_cast<uint>(ff.size());
+            size = static_cast<uint>(quadsHierarchy.GetSize());
             out.write(reinterpret_cast<char*>(&size), sizeof(size));
-            for (auto& row: ff) {
-                const uint rowSize = row.size();
+            for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
+                const auto quad = quadsHierarchy.GetQuad(i);
+                for (const auto& v: quad.GetVertices()) {
+                    const auto point = v.GetPoint();
+                    const auto normal = v.GetNormal();
+                    const auto texCoord = v.GetTextureCoordinates();
+                    const auto matId = v.GetMaterialNumber();
+                    out.write(reinterpret_cast<const char*>(&point), sizeof(point));
+                    out.write(reinterpret_cast<const char*>(&normal), sizeof(normal));
+                    out.write(reinterpret_cast<const char*>(&texCoord), sizeof(texCoord));
+                    out.write(reinterpret_cast<const char*>(&matId), sizeof(matId));
+                }
+                auto childPair = make_pair(-1, -1);
+                if (quadsHierarchy.HasChildren(i)) {
+                    childPair = quadsHierarchy.GetChildren(i);
+                }
+                out.write(reinterpret_cast<char*>(&childPair.first), sizeof(childPair.first));
+                out.write(reinterpret_cast<char*>(&childPair.second), sizeof(childPair.second));
+                const uint rowSize = hierarchicalFF[i].size();
                 out.write(reinterpret_cast<const char*>(&rowSize), sizeof(rowSize));
-                for (auto& item: row) {
+                for (auto& item: hierarchicalFF[i]) {
                     out.write(reinterpret_cast<char*>(&item), sizeof(item));
                 }
             }
             in.close();
             out.close();
-            return ff;
+            return;
         }
-        std::vector<std::map<uint, float> > ff;
         in.read(reinterpret_cast<char*>(&size), sizeof(size));
-        ff.resize(size);
-        for (auto& row: ff) {
-            uint rowSize;
+        hierarchicalFF.resize(size);
+        for (uint i = 0; i < size; ++i) {
+            array<ModelVertex, 4> vertices;
+            for (auto &vertex : vertices) {
+                glm::vec4 point;
+                glm::vec4 normal;
+                glm::vec2 texCoord;
+                uint matId;
+                in.read(reinterpret_cast<char*>(&point), sizeof(point));
+                in.read(reinterpret_cast<char*>(&normal), sizeof(normal));
+                in.read(reinterpret_cast<char*>(&texCoord), sizeof(texCoord));
+                in.read(reinterpret_cast<char*>(&matId), sizeof(matId));
+                vertex = ModelVertex(point, normal, texCoord, matId);
+            }
+            quadsHierarchy.AddQuad(Quad(vertices[0], vertices[1], vertices[2], vertices[3]));
+            auto childPair = make_pair(-1, -1);
+            in.read(reinterpret_cast<char*>(&childPair.first), sizeof(childPair.first));
+            in.read(reinterpret_cast<char*>(&childPair.second), sizeof(childPair.second));
+            quadsHierarchy.SetChildren(i, childPair);
+            uint rowSize = 0;
             in.read(reinterpret_cast<char*>(&rowSize), sizeof(rowSize));
-            std::pair<uint, float> item;
-            for (uint i = 0; i < rowSize; ++i) {
-                in.read(reinterpret_cast<char*>(&item), sizeof(item));
-                row[item.first] = item.second;
+            for (uint j = 0; j < rowSize; ++j) {
+                pair<uint, float> f;
+                in.read(reinterpret_cast<char*>(&f), sizeof(f));
+                hierarchicalFF[i][f.first] = f.second;
             }
         }
-        in.close();
-        return ff;
     }
 
 public:
@@ -102,83 +137,16 @@ public:
         AddArgument("MaxHierarchyDepth", 4, "");
     }
 
-    void PrepareBuffers(const std::vector<glm::vec4>& colorsPerQuad) {
-        std::map<
-            std::pair<glm::vec4, glm::vec4>,
-            int,
-            bool(*)(const std::pair<glm::vec4, glm::vec4>&, const std::pair<glm::vec4, glm::vec4>&)
-        > pointsIndices(
-            [](const std::pair<glm::vec4, glm::vec4>& a, const std::pair<glm::vec4, glm::vec4>& b) {
-                return vec4Less(a.first, b.first) || (a.first == b.first && vec4Less(a.second, b.second));
-            }
-        );
-        std::vector<glm::vec4> vertices, indirectLightDeviceBuffer;
-        std::vector<glm::vec4> diffusePerVertex;
-        std::vector<uint> indices, interpolationValuesCount;
-        std::vector<glm::vec4> normalsPerVertex;
-
-        for (uint quadNum = 0; quadNum < quads.size(); ++quadNum) {
-            const auto quadVertices = quads[quadNum].GetVertices();
-            std::array<uint, quadVertices.size()> quadIndices = {};
-            glm::vec4 indirectQuadLight = indirectLight[quadNum];
-            for (uint i = 0; i < quadVertices.size(); ++i) {
-                const auto pointWithNormal = std::make_pair(quadVertices[i].GetPoint(), quadVertices[i].GetNormal());
-                const auto pointIterator = pointsIndices.find(pointWithNormal);
-                if (pointIterator == pointsIndices.end()) {
-                    pointsIndices[pointWithNormal] = static_cast<uint>(vertices.size());
-                    vertices.push_back(pointWithNormal.first);
-                    indirectLightDeviceBuffer.push_back(indirectQuadLight);
-                    interpolationValuesCount.push_back(1);
-                    diffusePerVertex.push_back(colorsPerQuad[quadNum]);
-                    normalsPerVertex.push_back(quads[quadNum].GetNormal());
-                } else {
-                    indirectLightDeviceBuffer[pointsIndices[pointWithNormal]] += indirectQuadLight;
-                    interpolationValuesCount[pointsIndices[pointWithNormal]]++;
-                }
-                quadIndices[i] = pointsIndices[pointWithNormal];
-            }
-            indices.push_back(quadIndices[0]);
-            indices.push_back(quadIndices[1]);
-            indices.push_back(quadIndices[2]);
-            indices.push_back(quadIndices[0]);
-            indices.push_back(quadIndices[2]);
-            indices.push_back(quadIndices[3]);
-
-            perQuadIndices.push_back(perQuadPositions.size());
-            perQuadIndices.push_back(perQuadPositions.size() + 1);
-            perQuadIndices.push_back(perQuadPositions.size() + 2);
-            perQuadIndices.push_back(perQuadPositions.size());
-            perQuadIndices.push_back(perQuadPositions.size() + 2);
-            perQuadIndices.push_back(perQuadPositions.size() + 3);
-            for (const auto& point: quads[quadNum].GetVertices()) {
-                perQuadPositions.push_back(point.GetPoint());
-                perQuadColors.push_back(colorsPerQuad[quadNum]);
-            }
-        }
-        for (uint i = 0; i < indirectLightDeviceBuffer.size(); ++i) {
-            indirectLightDeviceBuffer[i] /= interpolationValuesCount[i];
-        }
-
-        ClearVector(vertices);
-        ClearVector(indirectLightDeviceBuffer);
-        ClearVector(diffusePerVertex);
-        ClearVector(indices);
-        ClearVector(interpolationValuesCount);
-        ClearVector(normalsPerVertex);
-        ClearVector(perQuadIndices);
-        ClearVector(perQuadPositions);
-        ClearVector(perQuadColors);
+    void PrepareBuffers() {
         cout << "Start to prepare buffers" << endl;
 
-        auto materialsEmission = sceneProperties->GetEmissionColors();
-        auto materialColors = sceneProperties->GetDiffuseColors();
+        materialsEmission = sceneProperties->GetEmissionColors();
+        materialColors = sceneProperties->GetDiffuseColors();
         std::vector<glm::vec4> firstBounce(quadsHierarchy.GetSize(), glm::vec4(0));
         for (uint i = 0; i < hierarchicalFF.size(); ++i) {
             for (const auto& f : hierarchicalFF[i]) {
                 const auto materialId = quadsHierarchy.GetQuad(f.first).GetMaterialId();
-                if (materialId == 7) {
-                    firstBounce[i] += materialsEmission[materialId] * f.second;
-                }
+                firstBounce[i] += materialsEmission[materialId] * f.second;
             }
             if (quadsHierarchy.HasChildren(i)) {
                 const auto children = quadsHierarchy.GetChildren(i);
@@ -228,11 +196,31 @@ public:
         }
         for (uint i = 0; i < firstBounce.size(); ++i) {
             thirdBounce[i] *= materialColors[quadsHierarchy.GetQuad(i).GetMaterialId()];
-            firstBounce[i] = secondBounce[i] + thirdBounce[i];
         }
-
+        std::vector<glm::vec4> forthBounce(quadsHierarchy.GetSize(), glm::vec4(0));
+        for (uint i = 0; i < hierarchicalFF.size(); ++i) {
+            for (const auto& f : hierarchicalFF[i]) {
+                forthBounce[i] += thirdBounce[f.first] * f.second;
+            }
+            if (quadsHierarchy.HasChildren(i)) {
+                const auto children = quadsHierarchy.GetChildren(i);
+                if (children.first != -1) {
+                    forthBounce[children.first] += forthBounce[i];
+                }
+                if (children.second != -1) {
+                    forthBounce[children.second] += forthBounce[i];
+                }
+            }
+        }
+        for (uint i = 0; i < firstBounce.size(); ++i) {
+            thirdBounce[i] *= materialColors[quadsHierarchy.GetQuad(i).GetMaterialId()];
+            firstBounce[i] = secondBounce[i] + thirdBounce[i] + forthBounce[i];
+        }
         cout << "First bounce computed" << endl;
 
+        std::vector<std::vector<uint> > indexBuffers;
+        indexBuffers.resize(materialColors.size());
+        std::vector<glm::vec4> quadsNormals;
         for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
             if (quadsHierarchy.IsFullySplittedNode(i)) {
                 continue;
@@ -247,39 +235,30 @@ public:
             if (flag) {
                 continue;
             }
-            perQuadIndices.push_back(perQuadPositions.size());
-            perQuadIndices.push_back(perQuadPositions.size() + 1);
-            perQuadIndices.push_back(perQuadPositions.size() + 2);
-            perQuadIndices.push_back(perQuadPositions.size());
-            perQuadIndices.push_back(perQuadPositions.size() + 2);
-            perQuadIndices.push_back(perQuadPositions.size() + 3);
-            glm::vec4 randVec = glm::vec4(static_cast<float>(rand()) / RAND_MAX, static_cast<float>(rand()) / RAND_MAX, static_cast<float>(rand()) / RAND_MAX, 1) / 20.f;
-            randVec = firstBounce[i];
+            const int matId = quadsHierarchy.GetQuad(i).GetMaterialId();
+            indexBuffers[matId].push_back(perQuadPositions.size());
+            indexBuffers[matId].push_back(perQuadPositions.size() + 1);
+            indexBuffers[matId].push_back(perQuadPositions.size() + 2);
+            indexBuffers[matId].push_back(perQuadPositions.size());
+            indexBuffers[matId].push_back(perQuadPositions.size() + 2);
+            indexBuffers[matId].push_back(perQuadPositions.size() + 3);
+            glm::vec4 randVec = firstBounce[i];
             for (const auto& point: quadsHierarchy.GetQuad(i).GetVertices()) {
                 perQuadPositions.push_back(point.GetPoint());
+                quadsNormals.push_back(point.GetNormal());
                 perQuadColors.push_back(randVec);
             }
             renderedQuads.push_back(i);
         }
-
         cout << "Buffers created" << endl;
-//
-//        pointsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(vertices);
-//        indirectLightBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(indirectLightDeviceBuffer);
-//        diffuseColorBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(diffusePerVertex);
-//        normalsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(normalsPerVertex);
 
         quadPointsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(perQuadPositions);
         quadColorsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(perQuadColors);
-        quadIndicesBuffer = Hors::GenAndFillBuffer<GL_ELEMENT_ARRAY_BUFFER>(perQuadIndices);
-
-//        indicesBuffer = Hors::GenAndFillBuffer<GL_ELEMENT_ARRAY_BUFFER>(indices);
-        runSize = static_cast<GLuint>(indices.size());
-
-        Program = Hors::CompileShaderProgram(
-            Hors::ReadAndCompileShader("shaders/Radiosity.vert", GL_VERTEX_SHADER),
-            Hors::ReadAndCompileShader("shaders/Radiosity.frag", GL_FRAGMENT_SHADER)
-        );
+        quadNormalsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(quadsNormals);
+        for (const auto &indexBuffer : indexBuffers) {
+            perMaterialIndices.push_back(Hors::GenAndFillBuffer<GL_ELEMENT_ARRAY_BUFFER>(indexBuffer));
+            perMaterialQuads.push_back(indexBuffer.size());
+        }
 
         QuadRender = Hors::CompileShaderProgram(
             Hors::ReadAndCompileShader("shaders/QuadRender.vert", GL_VERTEX_SHADER),
@@ -300,57 +279,15 @@ public:
         glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
         glEnableVertexAttribArray(1); CHECK_GL_ERRORS;
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *quadIndicesBuffer); CHECK_GL_ERRORS;
-        glEnable(GL_DEPTH_TEST); CHECK_GL_ERRORS;
+        glBindBuffer(GL_ARRAY_BUFFER, *quadNormalsBuffer); CHECK_GL_ERRORS;
+        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
+        glEnableVertexAttribArray(2); CHECK_GL_ERRORS;
 
-//        glUseProgram(Program); CHECK_GL_ERRORS;
-//
-//        GLuint VAO;
-//        glGenVertexArrays(1, &VAO); CHECK_GL_ERRORS;
-//        glBindVertexArray(VAO); CHECK_GL_ERRORS;
-//
-//        glBindBuffer(GL_ARRAY_BUFFER, *pointsBuffer); CHECK_GL_ERRORS;
-//        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
-//        glEnableVertexAttribArray(0); CHECK_GL_ERRORS;
-//
-//        glBindBuffer(GL_ARRAY_BUFFER, *indirectLightBuffer); CHECK_GL_ERRORS;
-//        glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
-//        glEnableVertexAttribArray(1); CHECK_GL_ERRORS;
-//
-//        glBindBuffer(GL_ARRAY_BUFFER, *diffuseColorBuffer); CHECK_GL_ERRORS;
-//        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
-//        glEnableVertexAttribArray(2); CHECK_GL_ERRORS;
-//
-//        glBindBuffer(GL_ARRAY_BUFFER, *normalsBuffer); CHECK_GL_ERRORS;
-//        glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
-//        glEnableVertexAttribArray(3); CHECK_GL_ERRORS;
-//
-//        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *indicesBuffer); CHECK_GL_ERRORS;
-//        glEnable(GL_DEPTH_TEST); CHECK_GL_ERRORS;
-//
-//        CameraUniformLocation = glGetUniformLocation(Program, "CameraMatrix"); CHECK_GL_ERRORS;
+        glEnable(GL_DEPTH_TEST); CHECK_GL_ERRORS;
 
         const auto cameras = sceneProperties->GetCameras(Get<Hors::WindowSize>("WindowSize").GetScreenRadio());
         assert(!cameras.empty());
         MainCamera = cameras[0];
-    }
-
-    std::vector<std::map<uint, float> > FormFactorComputationEmbree() {
-        std::vector<std::vector<glm::vec4> > points;
-        std::vector<std::vector<uint> > indices;
-        for (auto &SceneMesh : SceneMeshes) {
-            std::vector<glm::vec4> meshPoints(SceneMesh.getVerticesNumber());
-            for (uint k = 0; k < points.size(); ++k) {
-                meshPoints[k] = glm::make_vec4(SceneMesh.getVertexPositionsFloat4Array() + k * 4);
-            }
-            std::vector<uint> meshIndices(
-                SceneMesh.getTriangleVertexIndicesArray(),
-                SceneMesh.getTriangleVertexIndicesArray() + SceneMesh.getIndicesNumber()
-            );
-            points.emplace_back(meshPoints);
-            indices.emplace_back(meshIndices);
-        }
-        return ComputeFormFactorsEmbree(quads, points, indices);
     }
 
     std::vector<std::map<int, float> > FormFactorComputationEmbree(QuadsContainer& quadsHierarchy) {
@@ -371,63 +308,23 @@ public:
         return ComputeFormFactorsEmbree(quadsHierarchy, points, indices, Get<uint>("MaxHierarchyDepth"));
     }
 
-    void NextSplit() {
-        int quadToSplit = -1;
-        for (uint i = 0; i < renderedQuads.size(); ++i) {
-            if (quadsHierarchy.HasChildren(renderedQuads[i])) {
-                quadToSplit = i;
-                break;
+    void SetLight() {
+        const auto globQuads = ExtractQuadsFromScene(SceneMeshes);
+        for (const auto &globQuad : globQuads) {
+            if (globQuad.GetMaterialId() == 7) { ///SCENE DEPENDENT!!!
+                glm::vec4 point = globQuad.GetVertices()[0].GetPoint();
+                point = glm::min(point, globQuad.GetVertices()[1].GetPoint());
+                point = glm::min(point, globQuad.GetVertices()[2].GetPoint());
+                point = glm::min(point, globQuad.GetVertices()[3].GetPoint());
+                point.w = globQuad.GetVertices()[2].GetPoint().x - point.x;
+                Hors::SetUniform(QuadRender, "lightPosAndSide", point);
+                Hors::SetUniform(QuadRender, "lightColor", materialsEmission[globQuad.GetMaterialId()]);
+                Hors::SetUniform(QuadRender, "lightNormal", globQuad.GetNormal());
             }
         }
-        if (quadToSplit == -1) {
-            return;
-        }
-        perQuadIndices.push_back(perQuadPositions.size());
-        perQuadIndices.push_back(perQuadPositions.size() + 1);
-        perQuadIndices.push_back(perQuadPositions.size() + 2);
-        perQuadIndices.push_back(perQuadPositions.size());
-        perQuadIndices.push_back(perQuadPositions.size() + 2);
-        perQuadIndices.push_back(perQuadPositions.size() + 3);
-
-        perQuadColors.push_back(perQuadColors[quadToSplit]);
-        perQuadColors.push_back(perQuadColors[quadToSplit]);
-        perQuadColors.push_back(perQuadColors[quadToSplit]);
-        perQuadColors.push_back(perQuadColors[quadToSplit]);
-        perQuadPositions.erase(perQuadPositions.begin() + quadToSplit * 4, perQuadPositions.begin() + quadToSplit * 4 + 4);
-        perQuadColors.erase(perQuadColors.begin() + quadToSplit * 4, perQuadColors.begin() + quadToSplit * 4 + 4);
-
-        auto children = quadsHierarchy.GetChildren(renderedQuads[quadToSplit]);
-        glm::vec4 randVec = glm::vec4(static_cast<float>(rand()) / RAND_MAX, static_cast<float>(rand()) / RAND_MAX, static_cast<float>(rand()) / RAND_MAX, 1);
-        for (const auto& point: quadsHierarchy.GetQuad(children.first).GetVertices()) {
-            perQuadPositions.push_back(point.GetPoint());
-            perQuadColors.push_back(randVec);
-        }
-        for (const auto& point: quadsHierarchy.GetQuad(children.second).GetVertices()) {
-            perQuadPositions.push_back(point.GetPoint());
-        }
-
-        renderedQuads.push_back(quadsHierarchy.GetChildren(quadToSplit).first);
-        renderedQuads.push_back(quadsHierarchy.GetChildren(quadToSplit).second);
-        renderedQuads.erase(renderedQuads.begin() + quadToSplit);
-
-        quadPointsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(perQuadPositions);
-        quadColorsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(perQuadColors);
-        quadIndicesBuffer = Hors::GenAndFillBuffer<GL_ELEMENT_ARRAY_BUFFER>(perQuadIndices);
-
-        glBindBuffer(GL_ARRAY_BUFFER, *quadPointsBuffer); CHECK_GL_ERRORS;
-        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
-        glEnableVertexAttribArray(0); CHECK_GL_ERRORS;
-
-        glBindBuffer(GL_ARRAY_BUFFER, *quadColorsBuffer); CHECK_GL_ERRORS;
-        glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
-        glEnableVertexAttribArray(1); CHECK_GL_ERRORS;
-
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *quadIndicesBuffer); CHECK_GL_ERRORS;
     }
 
     void Run() final {
-        const float MinCellWidth = 0.75f / Get<int>("LoD");
-
         sceneProperties = std::make_unique<Hors::SceneProperties>(Get("ScenePropertiesFile"));
         SceneMeshes.resize(sceneProperties->GetChunksPaths().size());
         auto matrices = sceneProperties->GetMeshMatrices();
@@ -450,62 +347,19 @@ public:
             }
             memcpy(const_cast<float*>(SceneMeshes[i].getVertexNormalsFloat4Array()), normals.data(), normals.size() * sizeof(normals[0]));
         }
-        quads = TessellateScene(ExtractQuadsFromScene(SceneMeshes), MinCellWidth);
 
-        assert(quads.size() < Get<uint>("MaxPatchesCount"));
-
-        cout << "Start to compute form-factors for " << quads.size() << " quads" << endl;
-        auto timestamp = time(nullptr);
-        auto formFactors = LoadFormFactors();
-        cout << "Form-factors computation: " << time(nullptr) - timestamp << " seconds" << endl;
-        uint zerosCount = 0;
-        for (auto& row : formFactors) {
-            zerosCount += formFactors.size() - row.size();
-        }
-        cout << "Zeros in matrix: " << zerosCount << endl;
-        cout << "Zeros part: " << static_cast<float>(zerosCount) / sqr(formFactors.size()) << endl;
-
-        auto materialsEmission = sceneProperties->GetEmissionColors();
-        std::vector<glm::vec4> emissionPerQuad(quads.size());
-        std::transform(
-            quads.begin(),
-            quads.end(),
-            emissionPerQuad.begin(),
-            [&materialsEmission](const Quad &q) { return materialsEmission[q.GetMaterialId()]; });
-
-        auto materialColors = sceneProperties->GetDiffuseColors();
-        std::vector<glm::vec4> colorsPerQuad(quads.size());
-        std::transform(
-            quads.begin(),
-            quads.end(),
-            colorsPerQuad.begin(),
-            [&materialColors](const Quad &q) { return materialColors[q.GetMaterialId()]; });
-
-        indirectLight = RecomputeColorsForQuadsCPU(formFactors, colorsPerQuad, emissionPerQuad, 4);
-
-        const auto globQuads = ExtractQuadsFromScene(SceneMeshes);
-        cout << "Start to compute form-factors for " << globQuads.size() << " quads" << endl;
-        timestamp = time(nullptr);
-        for (const auto& quad: globQuads) {
-            quadsHierarchy.AddQuad(quad);
-        }
-        baseQuadsCount = quadsHierarchy.GetSize();
-        hierarchicalFF = FormFactorComputationEmbree(quadsHierarchy);
-        std::cout << quadsHierarchy.GetSize() << ' ' << hierarchicalFF.size() << endl;
-        cout << "Before compress: " << hierarchicalFF.size() << endl;
-        RemoveUnnecessaryQuads(quadsHierarchy, hierarchicalFF);
-        cout << "After compress: " << hierarchicalFF.size() << endl;
-        std::cout << quadsHierarchy.GetSize() << ' ' << hierarchicalFF.size() << endl;
-        cout << "Form-factors hierarchy computation: " << time(nullptr) - timestamp << " seconds" << endl;
-
-        PrepareBuffers(indirectLight);
-        AddKeyboardEvent('n', [this]() {this->NextSplit();});
+        LoadFormFactorsHierarchy();
+        PrepareBuffers();
 
         int formFactorsCount = 0;
         for (const auto& row : hierarchicalFF) {
             formFactorsCount += row.size();
         }
+        cout << "Quads: " << hierarchicalFF.size() << endl;
         cout << "FormFactors count: " << formFactorsCount << endl;
+        cout << "FormFactors per quad: " << static_cast<float>(formFactorsCount) / hierarchicalFF.size() << endl;
+
+        SetLight();
     }
 
     void RenderFunction() final {
@@ -513,10 +367,12 @@ public:
         Hors::SetUniform(QuadRender, "CameraMatrix", MainCamera.GetMatrix());
         glClearColor(0, 0, 0, 0); CHECK_GL_ERRORS;
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); CHECK_GL_ERRORS;
-//        glUniformMatrix4fv(CameraUniformLocation, 1, GL_FALSE, glm::value_ptr(MainCamera.GetMatrix())); CHECK_GL_ERRORS;
-//        Hors::SetUniform(Program, "cameraPosition", glm::vec4(MainCamera.GetPosition(), 1)); CHECK_GL_ERRORS;
-//        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(runSize), GL_UNSIGNED_INT, nullptr); CHECK_GL_ERRORS;
-        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(perQuadIndices.size()), GL_UNSIGNED_INT, nullptr); CHECK_GL_ERRORS;
+        for (uint i = 0; i < perMaterialIndices.size(); ++i) {
+            Hors::SetUniform(QuadRender, "diffuseColor", materialColors[i]);
+            Hors::SetUniform(QuadRender, "emissionColor", materialsEmission[i]);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *perMaterialIndices[i]); CHECK_GL_ERRORS;
+            glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(perMaterialQuads[i]), GL_UNSIGNED_INT, nullptr); CHECK_GL_ERRORS;
+        }
         glFinish(); CHECK_GL_ERRORS;
         glutSwapBuffers();
     }

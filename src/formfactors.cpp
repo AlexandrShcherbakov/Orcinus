@@ -344,8 +344,13 @@ class EmbreeHierarchicalFFJob {
     std::vector<std::map<int, float> > FF;
     RTCIntersectContext IntersectionContext;
     const float EPS = 1e-7;
+    std::map<std::pair<int, int>, float> cache;
 
     float GetTwoQuadsFF(const int idx1, const int idx2) {
+        const auto cacheKey = std::make_pair(std::min(idx1, idx2), std::max(idx1, idx2));
+        if (cache.count(cacheKey)) {
+            return cache[cacheKey];
+        }
         const uint PACKET_SIZE = 16;
         const auto samples = GenerateRandomSamples(PACKET_SIZE * 2);
 
@@ -397,10 +402,11 @@ class EmbreeHierarchicalFFJob {
             }
         }
 
+        cache[cacheKey] = 0;
         if (visibilityCount && samplesSum) {
-            return samplesSum / visibilityCount / static_cast<float>(M_PI) * Quads.GetQuad(idx1).GetSquare() * Quads.GetQuad(idx2).GetSquare();
+            cache[cacheKey] = samplesSum / visibilityCount / static_cast<float>(M_PI) * Quads.GetQuad(idx1).GetSquare() * Quads.GetQuad(idx2).GetSquare();
         }
-        return 0;
+        return cache[cacheKey];
     }
 
     void ProcessTwoQuads(const int idx1, const int idx2, const int depth1, const int depth2) {

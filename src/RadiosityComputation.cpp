@@ -51,18 +51,23 @@ void RemoveUnnecessaryQuads(
             ++z;
             quads.RemoveQuad(i);
             ff.erase(ff.begin() + i);
-            for (auto &ff_row : ff) {
-                std::map<int, float> updated;
-                for (const auto it : ff_row) {
-                    if (it.first > i) {
-                        updated[it.first - 1] = it.second;
+            const int THREADS_COUNT = 10;
+            std::array<std::map<int, float>, THREADS_COUNT> updated;
+#pragma omp parallel for num_threads(THREADS_COUNT)
+            for (int threadId = 0; threadId < THREADS_COUNT; ++threadId) {
+                for (uint j = ff.size() / THREADS_COUNT * threadId; j < ff.size() / THREADS_COUNT * (threadId + 1); ++j) {
+                    updated[threadId].clear();
+                    for (const auto it : ff[j]) {
+                        if (it.first > i) {
+                            updated[threadId][it.first - 1] = it.second;
+                        }
                     }
-                }
-                for (const auto it : updated) {
-                    ff_row.erase(it.first + 1);
-                }
-                for (const auto it : updated) {
-                    ff_row[it.first] = it.second;
+                    for (const auto it : updated[threadId]) {
+                        ff[j].erase(it.first + 1);
+                    }
+                    for (const auto it : updated[threadId]) {
+                        ff[j][it.first] = it.second;
+                    }
                 }
             }
         }
