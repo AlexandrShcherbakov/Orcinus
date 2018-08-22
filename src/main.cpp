@@ -44,6 +44,9 @@ class RadiosityProgram : public Hors::Program {
     std::vector<glm::vec4> quadsNormals;
     std::vector<glm::vec4> materialsEmission;
     std::vector<glm::vec4> materialColors;
+    GLuint shadowMapTex;
+    glm::vec3 lightCenter;
+    float lightSide;
 
     void LoadFormFactorsHierarchy() {
         std::stringstream ss;
@@ -236,19 +239,19 @@ public:
                 continue;
             }
             const int matId = quadsHierarchy.GetQuad(i).GetMaterialId();
-            indexBuffers[matId].push_back(perQuadPositions.size());
-            indexBuffers[matId].push_back(perQuadPositions.size() + 1);
-            indexBuffers[matId].push_back(perQuadPositions.size() + 2);
-            indexBuffers[matId].push_back(perQuadPositions.size());
-            indexBuffers[matId].push_back(perQuadPositions.size() + 2);
-            indexBuffers[matId].push_back(perQuadPositions.size() + 3);
+            indexBuffers[matId].push_back(static_cast<unsigned int &&>(perQuadPositions.size()));
+            indexBuffers[matId].push_back(static_cast<unsigned int &&>(perQuadPositions.size() + 1));
+            indexBuffers[matId].push_back(static_cast<unsigned int &&>(perQuadPositions.size() + 2));
+            indexBuffers[matId].push_back(static_cast<unsigned int &&>(perQuadPositions.size()));
+            indexBuffers[matId].push_back(static_cast<unsigned int &&>(perQuadPositions.size() + 2));
+            indexBuffers[matId].push_back(static_cast<unsigned int &&>(perQuadPositions.size() + 3));
             glm::vec4 randVec = firstBounce[i];
             for (const auto& point: quadsHierarchy.GetQuad(i).GetVertices()) {
                 perQuadPositions.push_back(point.GetPoint());
                 quadsNormals.push_back(point.GetNormal());
                 perQuadColors.push_back(randVec);
             }
-            renderedQuads.push_back(i);
+            renderedQuads.push_back(static_cast<unsigned int &&>(i));
         }
         cout << "Buffers created" << endl;
 
@@ -257,7 +260,7 @@ public:
         quadNormalsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(quadsNormals);
         for (const auto &indexBuffer : indexBuffers) {
             perMaterialIndices.push_back(Hors::GenAndFillBuffer<GL_ELEMENT_ARRAY_BUFFER>(indexBuffer));
-            perMaterialQuads.push_back(indexBuffer.size());
+            perMaterialQuads.push_back(static_cast<unsigned int &&>(indexBuffer.size()));
         }
 
         QuadRender = Hors::CompileShaderProgram(
@@ -317,11 +320,69 @@ public:
                 point = glm::min(point, globQuad.GetVertices()[2].GetPoint());
                 point = glm::min(point, globQuad.GetVertices()[3].GetPoint());
                 point.w = globQuad.GetVertices()[2].GetPoint().x - point.x;
+                lightCenter = glm::vec3(point);
+                lightCenter += point.w * 0.5f;
+                lightSide = point.w;
                 Hors::SetUniform(QuadRender, "lightPosAndSide", point);
                 Hors::SetUniform(QuadRender, "lightColor", materialsEmission[globQuad.GetMaterialId()]);
                 Hors::SetUniform(QuadRender, "lightNormal", globQuad.GetNormal());
             }
         }
+    }
+
+    void CreateShadowMap() {
+        glGenTextures(1, &shadowMapTex); CHECK_GL_ERRORS;
+        glBindTexture(GL_TEXTURE_2D, shadowMapTex); CHECK_GL_ERRORS;
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); CHECK_GL_ERRORS;
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); CHECK_GL_ERRORS;
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); CHECK_GL_ERRORS;
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); CHECK_GL_ERRORS;
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32, 1024, 1024, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr); CHECK_GL_ERRORS;
+
+        GLuint fb;
+        glGenFramebuffers(1, &fb); CHECK_GL_ERRORS;
+        glBindFramebuffer(GL_FRAMEBUFFER, fb); CHECK_GL_ERRORS;
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowMapTex, 0); CHECK_GL_ERRORS;
+
+        GLenum status;
+        status = glCheckFramebufferStatus(GL_FRAMEBUFFER); CHECK_GL_ERRORS;
+        if (status != GL_FRAMEBUFFER_COMPLETE) {
+            cerr << "Wrong framebuffer. Error: " << status << endl;
+        }
+
+        glDrawBuffer(GL_NONE);
+        glReadBuffer(GL_NONE);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, 1024, 1024);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+
+        GLuint depthRender = Hors::CompileShaderProgram(
+            Hors::ReadAndCompileShader("shaders/Depth.vert", GL_VERTEX_SHADER),
+            Hors::ReadAndCompileShader("shaders/Depth.frag", GL_FRAGMENT_SHADER)
+        );
+
+        const float toPlaneDist = lightSide * 0.5f;
+        Hors::Camera depthCam(lightCenter + glm::vec3(0.f, toPlaneDist, 0.f) / 25.f, glm::vec3(0, -1, 0), glm::vec3(1, 0, 0),
+                              std::atan2(toPlaneDist, lightSide * 0.125f / 16) * (180.0/3.141592653589793238463), 1, toPlaneDist, 100);
+        Hors::SetUniform(QuadRender, "shadowMapMatrix", depthCam.GetMatrix());
+
+        glUseProgram(depthRender); CHECK_GL_ERRORS;
+        Hors::SetUniform(depthRender, "cameraMatrix", depthCam.GetMatrix());
+        glClearColor(0, 0, 0, 0); CHECK_GL_ERRORS;
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); CHECK_GL_ERRORS;
+        for (uint i = 0; i < perMaterialIndices.size(); ++i) {
+            if (i == 7) {
+                continue;
+            }
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *perMaterialIndices[i]); CHECK_GL_ERRORS;
+            glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(perMaterialQuads[i]), GL_UNSIGNED_INT, nullptr); CHECK_GL_ERRORS;
+        }
+        glFinish(); CHECK_GL_ERRORS;
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0); CHECK_GL_ERRORS;
+        glDeleteFramebuffers(1, &fb); CHECK_GL_ERRORS;
+
+        glViewport(0, 0, 1600, 900);
     }
 
     void Run() final {
@@ -360,6 +421,7 @@ public:
         cout << "FormFactors per quad: " << static_cast<float>(formFactorsCount) / hierarchicalFF.size() << endl;
 
         SetLight();
+        CreateShadowMap();
     }
 
     void RenderFunction() final {
@@ -367,6 +429,9 @@ public:
         Hors::SetUniform(QuadRender, "CameraMatrix", MainCamera.GetMatrix());
         glClearColor(0, 0, 0, 0); CHECK_GL_ERRORS;
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); CHECK_GL_ERRORS;
+        glBindTexture(GL_TEXTURE_2D, shadowMapTex); CHECK_GL_ERRORS;
+        glActiveTexture(GL_TEXTURE0); CHECK_GL_ERRORS;
+        Hors::SetUniform(QuadRender, "shadowMap", 0);
         for (uint i = 0; i < perMaterialIndices.size(); ++i) {
             Hors::SetUniform(QuadRender, "diffuseColor", materialColors[i]);
             Hors::SetUniform(QuadRender, "emissionColor", materialsEmission[i]);
