@@ -28,6 +28,20 @@ inline bool vec4Less(const glm::vec4& a, const glm::vec4& b) {
         || (a.z == b.z && (a.w < b.w))))));
 }
 
+class LabeledTimer {
+    clock_t start;
+    std::string label;
+public:
+    LabeledTimer(const std::string& l) {
+        start = clock();
+        label = l;
+    }
+    ~LabeledTimer() {
+        auto end = static_cast<float>(clock() - start) / CLOCKS_PER_SEC * 1000;
+        std::cout << label << ": " << end << " msec" << std::endl;
+    }
+};
+
 class RadiosityProgram : public Hors::Program {
     std::vector<HydraGeomData> SceneMeshes;
     std::vector<Quad> quads = {};
@@ -41,7 +55,6 @@ class RadiosityProgram : public Hors::Program {
     GLuint QuadRender;
     std::vector<glm::vec4> perQuadPositions, perQuadColors;
     std::vector<uint> renderedQuads;
-    std::vector<glm::vec4> quadsNormals;
     std::vector<glm::vec4> materialsEmission;
     std::vector<glm::vec4> materialColors;
     GLuint shadowMapTex;
@@ -92,7 +105,8 @@ class RadiosityProgram : public Hors::Program {
                 const uint rowSize = hierarchicalFF[i].size();
                 out.write(reinterpret_cast<const char*>(&rowSize), sizeof(rowSize));
                 for (auto& item: hierarchicalFF[i]) {
-                    out.write(reinterpret_cast<char*>(&item), sizeof(item));
+                    out.write(reinterpret_cast<const char*>(&item.first), sizeof(item.first));
+                    out.write(reinterpret_cast<char*>(&item.second), sizeof(item.second));
                 }
             }
             in.close();
@@ -122,9 +136,11 @@ class RadiosityProgram : public Hors::Program {
             uint rowSize = 0;
             in.read(reinterpret_cast<char*>(&rowSize), sizeof(rowSize));
             for (uint j = 0; j < rowSize; ++j) {
-                pair<uint, float> f;
-                in.read(reinterpret_cast<char*>(&f), sizeof(f));
-                hierarchicalFF[i][f.first] = f.second;
+                int key;
+                float value;
+                in.read(reinterpret_cast<char*>(&key), sizeof(key));
+                in.read(reinterpret_cast<char*>(&value), sizeof(value));
+                hierarchicalFF[i][key] = value;
             }
         }
     }
@@ -138,88 +154,26 @@ public:
         AddArgument("ScenePropertiesFile", "", "File with scene properties.");
         AddArgument("DataDir", "", "Directory with scene chunks.");
         AddArgument("MaxHierarchyDepth", 4, "");
+        AddArgument("Bounces", 3, "");
     }
 
     void PrepareBuffers() {
-        cout << "Start to prepare buffers" << endl;
-
         materialsEmission = sceneProperties->GetEmissionColors();
         materialColors = sceneProperties->GetDiffuseColors();
-        std::vector<glm::vec4> firstBounce(quadsHierarchy.GetSize(), glm::vec4(0));
-        for (uint i = 0; i < hierarchicalFF.size(); ++i) {
-            for (const auto& f : hierarchicalFF[i]) {
-                const auto materialId = quadsHierarchy.GetQuad(f.first).GetMaterialId();
-                firstBounce[i] += materialsEmission[materialId] * f.second;
+        vector<glm::vec4> firstBounce;
+        {
+            const auto bounces = Get<int>("Bounces");
+            const auto hierarchyDepth = Get<uint>("MaxHierarchyDepth");
+            float res = 0;
+            const int ITERATIONS_COUNT = 1;
+            for (int i = 0; i < ITERATIONS_COUNT; ++i) {
+                clock_t start = clock();
+                firstBounce = computeIndirectLighting(static_cast<const uint>(bounces));
+                res += static_cast<float>(clock() - start) / CLOCKS_PER_SEC * 1000;
             }
-            if (quadsHierarchy.HasChildren(i)) {
-                const auto children = quadsHierarchy.GetChildren(i);
-                if (children.first != -1) {
-                    firstBounce[children.first] += firstBounce[i];
-                }
-                if (children.second != -1) {
-                    firstBounce[children.second] += firstBounce[i];
-                }
-            }
+            const auto result = res / ITERATIONS_COUNT;
+            cout << "Compute indirect lighting 100 times: " << bounces << ' ' << hierarchyDepth << ' ' << result << endl;
         }
-        for (uint i = 0; i < firstBounce.size(); ++i) {
-            firstBounce[i] *= materialColors[quadsHierarchy.GetQuad(i).GetMaterialId()];
-        }
-        std::vector<glm::vec4> secondBounce(quadsHierarchy.GetSize(), glm::vec4(0));
-        for (uint i = 0; i < hierarchicalFF.size(); ++i) {
-            for (const auto& f : hierarchicalFF[i]) {
-                secondBounce[i] += firstBounce[f.first] * f.second;
-            }
-            if (quadsHierarchy.HasChildren(i)) {
-                const auto children = quadsHierarchy.GetChildren(i);
-                if (children.first != -1) {
-                    secondBounce[children.first] += secondBounce[i];
-                }
-                if (children.second != -1) {
-                    secondBounce[children.second] += secondBounce[i];
-                }
-            }
-        }
-        for (uint i = 0; i < firstBounce.size(); ++i) {
-            secondBounce[i] *= materialColors[quadsHierarchy.GetQuad(i).GetMaterialId()];
-        }
-        std::vector<glm::vec4> thirdBounce(quadsHierarchy.GetSize(), glm::vec4(0));
-        for (uint i = 0; i < hierarchicalFF.size(); ++i) {
-            for (const auto& f : hierarchicalFF[i]) {
-                thirdBounce[i] += secondBounce[f.first] * f.second;
-            }
-            if (quadsHierarchy.HasChildren(i)) {
-                const auto children = quadsHierarchy.GetChildren(i);
-                if (children.first != -1) {
-                    thirdBounce[children.first] += thirdBounce[i];
-                }
-                if (children.second != -1) {
-                    thirdBounce[children.second] += thirdBounce[i];
-                }
-            }
-        }
-        for (uint i = 0; i < firstBounce.size(); ++i) {
-            thirdBounce[i] *= materialColors[quadsHierarchy.GetQuad(i).GetMaterialId()];
-        }
-        std::vector<glm::vec4> forthBounce(quadsHierarchy.GetSize(), glm::vec4(0));
-        for (uint i = 0; i < hierarchicalFF.size(); ++i) {
-            for (const auto& f : hierarchicalFF[i]) {
-                forthBounce[i] += thirdBounce[f.first] * f.second;
-            }
-            if (quadsHierarchy.HasChildren(i)) {
-                const auto children = quadsHierarchy.GetChildren(i);
-                if (children.first != -1) {
-                    forthBounce[children.first] += forthBounce[i];
-                }
-                if (children.second != -1) {
-                    forthBounce[children.second] += forthBounce[i];
-                }
-            }
-        }
-        for (uint i = 0; i < firstBounce.size(); ++i) {
-            thirdBounce[i] *= materialColors[quadsHierarchy.GetQuad(i).GetMaterialId()];
-            firstBounce[i] = secondBounce[i] + thirdBounce[i] + forthBounce[i];
-        }
-        cout << "First bounce computed" << endl;
 
         std::vector<std::vector<uint> > indexBuffers;
         indexBuffers.resize(materialColors.size());
@@ -253,7 +207,6 @@ public:
             }
             renderedQuads.push_back(static_cast<unsigned int &&>(i));
         }
-        cout << "Buffers created" << endl;
 
         quadPointsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(perQuadPositions);
         quadColorsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(perQuadColors);
@@ -291,6 +244,53 @@ public:
         const auto cameras = sceneProperties->GetCameras(Get<Hors::WindowSize>("WindowSize").GetScreenRadio());
         assert(!cameras.empty());
         MainCamera = cameras[0];
+    }
+
+    vector<glm::vec4> computeIndirectLighting(const uint bouncesCount) {
+        vector<glm::vec4> currentBounce(quadsHierarchy.GetSize(), glm::vec4(0));
+        vector<glm::vec4> previousBounce(currentBounce.size(), glm::vec4(0));
+        vector<glm::vec4> allBounces(currentBounce.size(), glm::vec4(0));
+        for (uint i = 0; i < hierarchicalFF.size(); ++i) {
+            for (const auto& f : hierarchicalFF[i]) {
+                const auto materialId = quadsHierarchy.GetQuad(f.first).GetMaterialId();
+                previousBounce[i] += materialsEmission[materialId] * f.second;
+            }
+            if (quadsHierarchy.HasChildren(i)) {
+                const auto children = quadsHierarchy.GetChildren(i);
+                if (children.first != -1) {
+                    previousBounce[children.first] += previousBounce[i];
+                }
+                if (children.second != -1) {
+                    previousBounce[children.second] += previousBounce[i];
+                }
+            }
+        }
+        for (uint i = 0; i < currentBounce.size(); ++i) {
+            previousBounce[i] *= materialColors[quadsHierarchy.GetQuad(i).GetMaterialId()];
+        }
+        for (uint bounce = 0; bounce < bouncesCount; ++bounce) {
+            for (uint i = 0; i < hierarchicalFF.size(); ++i) {
+                for (const auto& f : hierarchicalFF[i]) {
+                    currentBounce[i] += previousBounce[f.first] * f.second;
+                }
+                if (quadsHierarchy.HasChildren(i)) {
+                    const auto children = quadsHierarchy.GetChildren(i);
+                    if (children.first != -1) {
+                        currentBounce[children.first] += currentBounce[i];
+                    }
+                    if (children.second != -1) {
+                        currentBounce[children.second] += currentBounce[i];
+                    }
+                }
+            }
+            for (uint i = 0; i < currentBounce.size(); ++i) {
+                currentBounce[i] *= materialColors[quadsHierarchy.GetQuad(i).GetMaterialId()];
+                previousBounce[i] = currentBounce[i];
+                allBounces[i] += currentBounce[i];
+                currentBounce[i] = glm::vec4(0);
+            }
+        }
+        return allBounces;
     }
 
     std::vector<std::map<int, float> > FormFactorComputationEmbree(QuadsContainer& quadsHierarchy) {
@@ -413,12 +413,15 @@ public:
         PrepareBuffers();
 
         int formFactorsCount = 0;
+        int maxFormFactorsCount = 0;
         for (const auto& row : hierarchicalFF) {
             formFactorsCount += row.size();
+            maxFormFactorsCount = std::max(maxFormFactorsCount, static_cast<int>(row.size()));
         }
         cout << "Quads: " << hierarchicalFF.size() << endl;
         cout << "FormFactors count: " << formFactorsCount << endl;
         cout << "FormFactors per quad: " << static_cast<float>(formFactorsCount) / hierarchicalFF.size() << endl;
+        cout << "Max form factors per quad: " << maxFormFactorsCount << endl;
 
         SetLight();
         CreateShadowMap();

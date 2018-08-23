@@ -236,7 +236,7 @@ public:
         return result;
     }
 
-    const Quad& GetQuad(const int idx) {
+    const Quad& GetQuad(const int idx) const {
         return Quads[idx];
     }
 
