@@ -96,12 +96,6 @@ class RadiosityProgram : public Hors::Program {
                     out.write(reinterpret_cast<const char*>(&texCoord), sizeof(texCoord));
                     out.write(reinterpret_cast<const char*>(&matId), sizeof(matId));
                 }
-                auto childPair = make_pair(-1, -1);
-                if (quadsHierarchy.HasChildren(i)) {
-                    childPair = quadsHierarchy.GetChildren(i);
-                }
-                out.write(reinterpret_cast<char*>(&childPair.first), sizeof(childPair.first));
-                out.write(reinterpret_cast<char*>(&childPair.second), sizeof(childPair.second));
                 const uint rowSize = hierarchicalFF[i].size();
                 out.write(reinterpret_cast<const char*>(&rowSize), sizeof(rowSize));
                 for (auto& item: hierarchicalFF[i]) {
@@ -129,10 +123,6 @@ class RadiosityProgram : public Hors::Program {
                 vertex = ModelVertex(point, normal, texCoord, matId);
             }
             quadsHierarchy.AddQuad(Quad(vertices[0], vertices[1], vertices[2], vertices[3]));
-            auto childPair = make_pair(-1, -1);
-            in.read(reinterpret_cast<char*>(&childPair.first), sizeof(childPair.first));
-            in.read(reinterpret_cast<char*>(&childPair.second), sizeof(childPair.second));
-            quadsHierarchy.SetChildren(i, childPair);
             uint rowSize = 0;
             in.read(reinterpret_cast<char*>(&rowSize), sizeof(rowSize));
             for (uint j = 0; j < rowSize; ++j) {
@@ -179,19 +169,6 @@ public:
         indexBuffers.resize(materialColors.size());
         std::vector<glm::vec4> quadsNormals;
         for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
-            if (quadsHierarchy.IsFullySplittedNode(i)) {
-                continue;
-            }
-            bool flag = false;
-            for (const auto toRender : renderedQuads) {
-                if (quadsHierarchy.IsChildOf(i, toRender)) {
-                    flag = true;
-                    break;
-                }
-            }
-            if (flag) {
-                continue;
-            }
             const int matId = quadsHierarchy.GetQuad(i).GetMaterialId();
             indexBuffers[matId].push_back(static_cast<unsigned int &&>(perQuadPositions.size()));
             indexBuffers[matId].push_back(static_cast<unsigned int &&>(perQuadPositions.size() + 1));
@@ -255,15 +232,6 @@ public:
                 const auto materialId = quadsHierarchy.GetQuad(f.first).GetMaterialId();
                 previousBounce[i] += materialsEmission[materialId] * f.second;
             }
-            if (quadsHierarchy.HasChildren(i)) {
-                const auto children = quadsHierarchy.GetChildren(i);
-                if (children.first != -1) {
-                    previousBounce[children.first] += previousBounce[i];
-                }
-                if (children.second != -1) {
-                    previousBounce[children.second] += previousBounce[i];
-                }
-            }
         }
         for (uint i = 0; i < currentBounce.size(); ++i) {
             previousBounce[i] *= materialColors[quadsHierarchy.GetQuad(i).GetMaterialId()];
@@ -272,15 +240,6 @@ public:
             for (uint i = 0; i < hierarchicalFF.size(); ++i) {
                 for (const auto& f : hierarchicalFF[i]) {
                     currentBounce[i] += previousBounce[f.first] * f.second;
-                }
-                if (quadsHierarchy.HasChildren(i)) {
-                    const auto children = quadsHierarchy.GetChildren(i);
-                    if (children.first != -1) {
-                        currentBounce[children.first] += currentBounce[i];
-                    }
-                    if (children.second != -1) {
-                        currentBounce[children.second] += currentBounce[i];
-                    }
                 }
             }
             for (uint i = 0; i < currentBounce.size(); ++i) {

@@ -409,33 +409,10 @@ class EmbreeHierarchicalFFJob {
         return cache[cacheKey];
     }
 
-    void ProcessTwoQuads(const int idx1, const int idx2, const int depth1, const int depth2) {
+    void ProcessTwoQuads(const int idx1, const int idx2) {
         const float ff = GetTwoQuadsFF(idx1, idx2);
         if (!ff) {
             return;
-        }
-        const auto ch1 = Quads.GetChildren(idx1);
-        const auto ch2 = Quads.GetChildren(idx2);
-        if (depth1) {
-            const auto ff11_2 = GetTwoQuadsFF(ch1.first, idx2);
-            const auto ff12_2 = GetTwoQuadsFF(ch1.second, idx2);
-            if (std::abs(ff - ff11_2 - ff12_2) > EPS) {
-                ProcessTwoQuads(ch1.first, idx2, depth1 - 1, depth2);
-                ProcessTwoQuads(ch1.second, idx2, depth1 - 1, depth2);
-                return;
-            }
-        }
-        if (depth2) {
-            const auto ff1_21 = GetTwoQuadsFF(idx1, ch2.first);
-            const auto ff1_22 = GetTwoQuadsFF(idx1, ch2.second);
-            if (std::abs(ff - ff1_21 - ff1_22) > EPS) {
-                ProcessTwoQuads(idx1, ch2.first, depth1, depth2 - 1);
-                ProcessTwoQuads(idx1, ch2.second, depth1, depth2 - 1);
-                return;
-            }
-        }
-        if (static_cast<int>(FF.size()) <= idx1 || static_cast<int>(FF.size()) <= idx2) {
-            FF.resize(std::max(idx1, idx2) + 1);
         }
         FF[idx1][idx2] = ff / Quads.GetQuad(idx1).GetSquare();
         FF[idx2][idx1] = ff / Quads.GetQuad(idx2).GetSquare();
@@ -481,11 +458,22 @@ public:
     }
 
     std::vector<std::map<int, float> > Execute(const uint maxDepth) {
-        const int mainQuadsCount = Quads.GetSize();
-        for (int i = 0; i < mainQuadsCount; ++i) {
-            for (int j = i + 1; j < mainQuadsCount; ++j) {
-                ProcessTwoQuads(i, j, maxDepth, maxDepth);
-                std::cout << "Pair: " << i << ' ' << j << " processed." << std::endl;
+        std::vector<Quad> result;
+        for (int i = 0; i < Quads.GetSize(); ++i) {
+            const auto subdivision = Quads.GetQuad(i).Tessellate(maxDepth);
+            result.insert(result.end(), subdivision.begin(), subdivision.end());
+        }
+        const int initSizeCount = Quads.GetSize();
+        for (int i = initSizeCount - 1; i >= 0; --i) {
+            Quads.RemoveQuad(i);
+        }
+        for (const auto &i : result) {
+            Quads.AddQuad(i);
+        }
+        FF.resize(static_cast<unsigned long>(Quads.GetSize()));
+        for (int i = 0; i < Quads.GetSize(); ++i) {
+            for (int j = i + 1; j < Quads.GetSize(); ++j) {
+                ProcessTwoQuads(i, j);
             }
         }
         return FF;

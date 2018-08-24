@@ -144,6 +144,25 @@ public:
         return result;
     }
 
+    std::vector<Quad> Tessellate(const uint inSideCount) const {
+        const auto stepHeight = (Vertices[1] - Vertices[0]) / inSideCount;
+        const auto stepWidth = (Vertices[3] - Vertices[0]) / inSideCount;
+        std::vector<Quad> result;
+        for (uint i = 0; i < inSideCount; ++i) {
+            for (uint j = 0; j < inSideCount; ++j) {
+                result.emplace_back(
+                    Quad(
+                        Vertices[0] + stepHeight * i + stepWidth * j,
+                        Vertices[0] + stepHeight * (i + 1) + stepWidth * j,
+                        Vertices[0] + stepHeight * (i + 1) + stepWidth * (j + 1),
+                        Vertices[0] + stepHeight * i + stepWidth * (j + 1)
+                    )
+                );
+            }
+        }
+        return result;
+    }
+
     glm::vec4 GetSample(const glm::vec2& sample) const {
         return Vertices[0].GetPoint()
             + (Vertices[1] - Vertices[0]).GetPoint() * sample.x
