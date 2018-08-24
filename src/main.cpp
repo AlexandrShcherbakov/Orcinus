@@ -57,6 +57,7 @@ class RadiosityProgram : public Hors::Program {
     std::vector<uint> renderedQuads;
     std::vector<glm::vec4> materialsEmission;
     std::vector<glm::vec4> materialColors;
+    std::vector<std::vector<glm::vec4> > multibounceMatrix;
     GLuint shadowMapTex;
     glm::vec3 lightCenter;
     float lightSide;
@@ -150,6 +151,12 @@ public:
     void PrepareBuffers() {
         materialsEmission = sceneProperties->GetEmissionColors();
         materialColors = sceneProperties->GetDiffuseColors();
+
+        {
+            LabeledTimer timer("Multibounce matrix computation");
+            ComputeMultibounceMatrix();
+        }
+
         vector<glm::vec4> firstBounce;
         {
             const auto bounces = Get<int>("Bounces");
@@ -224,29 +231,11 @@ public:
     }
 
     vector<glm::vec4> computeIndirectLighting(const uint bouncesCount) {
-        vector<glm::vec4> currentBounce(quadsHierarchy.GetSize(), glm::vec4(0));
-        vector<glm::vec4> previousBounce(currentBounce.size(), glm::vec4(0));
-        vector<glm::vec4> allBounces(currentBounce.size(), glm::vec4(0));
-        for (uint i = 0; i < hierarchicalFF.size(); ++i) {
-            for (const auto& f : hierarchicalFF[i]) {
-                const auto materialId = quadsHierarchy.GetQuad(f.first).GetMaterialId();
-                previousBounce[i] += materialsEmission[materialId] * f.second;
-            }
-        }
-        for (uint i = 0; i < currentBounce.size(); ++i) {
-            previousBounce[i] *= materialColors[quadsHierarchy.GetQuad(i).GetMaterialId()];
-        }
-        for (uint bounce = 0; bounce < bouncesCount; ++bounce) {
-            for (uint i = 0; i < hierarchicalFF.size(); ++i) {
-                for (const auto& f : hierarchicalFF[i]) {
-                    currentBounce[i] += previousBounce[f.first] * f.second;
-                }
-            }
-            for (uint i = 0; i < currentBounce.size(); ++i) {
-                currentBounce[i] *= materialColors[quadsHierarchy.GetQuad(i).GetMaterialId()];
-                previousBounce[i] = currentBounce[i];
-                allBounces[i] += currentBounce[i];
-                currentBounce[i] = glm::vec4(0);
+        vector<glm::vec4> allBounces(multibounceMatrix.size(), glm::vec4(0));
+        for (uint i = 0; i < multibounceMatrix.size(); ++i) {
+            for (uint j = 0; j < multibounceMatrix[i].size(); ++j) {
+                const auto materialId = quadsHierarchy.GetQuad(j).GetMaterialId();
+                allBounces[i] += materialsEmission[materialId] * multibounceMatrix[i][j];
             }
         }
         return allBounces;
@@ -344,6 +333,42 @@ public:
         glViewport(0, 0, 1600, 900);
     }
 
+    void MultiplyMatrices(std::vector<std::vector<glm::vec4> >& a, std::vector<std::vector<glm::vec4> > bTransposed) const {
+        const uint size = a.size();
+        const auto originCopy = a;
+        for (uint i = 0; i < size; ++i) {
+            for (uint j = 0; j < size; ++j) {
+                a[i][j] = glm::vec4(0);
+                for (uint k = 0; k < size; ++k) {
+                    a[i][j] += originCopy[i][k] * bTransposed[j][k];
+                }
+            }
+        }
+    }
+
+    void ComputeMultibounceMatrix() {
+        std::vector<std::vector<glm::vec4> > coloredFF(hierarchicalFF.size());
+        for (uint i = 0; i < coloredFF.size(); ++i) {
+            coloredFF[i].assign(hierarchicalFF.size(), glm::vec4(0));
+            for (uint j = 0; j < coloredFF[i].size(); ++j) {
+                if (hierarchicalFF[i].count(j)) {
+                    coloredFF[i][j] = hierarchicalFF[j][i] * materialColors[quadsHierarchy.GetQuad(j).GetMaterialId()];
+                }
+            }
+        }
+        multibounceMatrix.assign(hierarchicalFF.size(), std::vector<glm::vec4>(hierarchicalFF.size(), glm::vec4(0)));
+        for (int bounce = 0; bounce < Get<int>("Bounces"); ++bounce) {
+            if (bounce) {
+                MultiplyMatrices(multibounceMatrix, coloredFF);
+            }
+            for (uint i = 0; i < multibounceMatrix.size(); ++i) {
+                multibounceMatrix[i][i] += 1;
+            }
+        }
+        MultiplyMatrices(multibounceMatrix, coloredFF);
+        MultiplyMatrices(multibounceMatrix, coloredFF);
+    }
+
     void Run() final {
         sceneProperties = std::make_unique<Hors::SceneProperties>(Get("ScenePropertiesFile"));
         SceneMeshes.resize(sceneProperties->GetChunksPaths().size());
@@ -384,6 +409,7 @@ public:
 
         SetLight();
         CreateShadowMap();
+
     }
 
     void RenderFunction() final {

@@ -8,6 +8,7 @@
   "ScenePropertiesFile": "Scenes/CornellBox2/statex_00001.xml",
   "RecomputeFormFactors": 0,
   "MaxPatchesCount": 110000,
-  "MaxHierarchyDepth": 15,
-  "FormFactorsDir": "Multibounce flat FF"
+  "MaxHierarchyDepth": 1,
+  "FormFactorsDir": "Multibounce flat FF",
+  "Bounces": 1
 }
