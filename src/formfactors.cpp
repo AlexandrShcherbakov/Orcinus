@@ -345,6 +345,7 @@ class EmbreeHierarchicalFFJob {
     RTCIntersectContext IntersectionContext;
     const float EPS = 1e-7;
     std::map<std::pair<int, int>, float> cache;
+    std::vector<Quad> bigQuads;
 
     float GetTwoQuadsFF(const int idx1, const int idx2) {
         const auto cacheKey = std::make_pair(std::min(idx1, idx2), std::max(idx1, idx2));
@@ -383,12 +384,23 @@ class EmbreeHierarchicalFFJob {
 
         for (uint k = 0; k < rays.size(); k += PACKET_SIZE) {
             const int validMask = ~0u;
+            rtcInitIntersectContext(&IntersectionContext); CHECK_EMBREE
+            IntersectionContext.flags = RTC_INTERSECT_CONTEXT_FLAG_COHERENT;
+            IntersectionContext.instID[0] = 0;
             rtcOccluded16(&validMask, Scene, &IntersectionContext, &raysPackets[k / PACKET_SIZE]); CHECK_EMBREE
         }
 
         for (uint k = 0; k < rays.size(); k += PACKET_SIZE) {
             for (uint l = 0; l < PACKET_SIZE; ++l) {
-                if (std::isinf(raysPackets[k / PACKET_SIZE].tfar[l])) {
+                visibilityCount++;
+//                if (raysPackets[k / PACKET_SIZE].tfar[l] < 0.f) {
+//                    continue;
+//                }
+                bool flag = false;
+                for (uint i = 0; i < bigQuads.size() && !flag; ++i) {
+                    flag = bigQuads[i].CheckIntersectionWithVector(rays[k + l].first, rays[k + l].first + rays[k + l].second);
+                }
+                if (flag) {
                     continue;
                 }
                 const float rayLength = glm::length(rays[k + l].second);
@@ -396,8 +408,10 @@ class EmbreeHierarchicalFFJob {
                 const float cosTheta2 = std::max(glm::dot(Quads.GetQuad(idx2).GetNormal(), -glm::normalize(rays[k + l].second)), 0.0f);
                 const float sampleValue = cosTheta1 * cosTheta2 / sqr(rayLength);
                 if (sampleValue < 0.5 * sqr(samples.size()) * static_cast<float>(M_PI)) {
-                    visibilityCount++;
+//                    visibilityCount++;
                     samplesSum += sampleValue;
+                } else {
+                    visibilityCount--;
                 }
             }
         }
@@ -444,9 +458,6 @@ public:
             rtcReleaseGeometry(geometry);
         }
         rtcCommitScene(Scene); CHECK_EMBREE
-        rtcInitIntersectContext(&IntersectionContext); CHECK_EMBREE
-        IntersectionContext.flags = RTC_INTERSECT_CONTEXT_FLAG_COHERENT;
-        IntersectionContext.instID[0] = 0;
     }
 
     ~EmbreeHierarchicalFFJob() {
@@ -460,6 +471,7 @@ public:
     std::vector<std::map<int, float> > Execute(const uint maxDepth) {
         std::vector<Quad> result;
         for (int i = 0; i < Quads.GetSize(); ++i) {
+            bigQuads.push_back(Quads.GetQuad(i));
             const auto subdivision = Quads.GetQuad(i).Tessellate(maxDepth);
             result.insert(result.end(), subdivision.begin(), subdivision.end());
         }

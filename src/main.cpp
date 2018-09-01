@@ -49,7 +49,7 @@ class RadiosityProgram : public Hors::Program {
     std::vector<std::map<int, float> > hierarchicalFF;
     QuadsContainer quadsHierarchy;
 
-    Hors::GLBuffer quadPointsBuffer, quadColorsBuffer, quadNormalsBuffer;
+    Hors::GLBuffer quadPointsBuffer, quadColorsBuffer;
     std::vector<Hors::GLBuffer> perMaterialIndices;
     std::vector<uint> perMaterialQuads;
     GLuint QuadRender;
@@ -58,9 +58,6 @@ class RadiosityProgram : public Hors::Program {
     std::vector<glm::vec4> materialsEmission;
     std::vector<glm::vec4> materialColors;
     std::vector<std::vector<glm::vec4> > multibounceMatrix;
-    GLuint shadowMapTex;
-    glm::vec3 lightCenter;
-    float lightSide;
 
     void LoadFormFactorsHierarchy() {
         std::stringstream ss;
@@ -68,7 +65,6 @@ class RadiosityProgram : public Hors::Program {
         uint size;
         ifstream in(ss.str(), ios::in | ios::binary);
         if (Get<bool>("RecomputeFormFactors") || !in.good()) {
-            assert(!quads.empty());
             const auto globQuads = ExtractQuadsFromScene(SceneMeshes);
             cout << "Start to compute form-factors for " << globQuads.size() << " quads" << endl;
             auto timestamp = time(nullptr);
@@ -76,10 +72,6 @@ class RadiosityProgram : public Hors::Program {
                 quadsHierarchy.AddQuad(quad);
             }
             hierarchicalFF = FormFactorComputationEmbree(quadsHierarchy);
-            std::cout << quadsHierarchy.GetSize() << ' ' << hierarchicalFF.size() << endl;
-            cout << "Before compress: " << hierarchicalFF.size() << endl;
-            RemoveUnnecessaryQuads(quadsHierarchy, hierarchicalFF);
-            cout << "After compress: " << hierarchicalFF.size() << endl;
             std::cout << quadsHierarchy.GetSize() << ' ' << hierarchicalFF.size() << endl;
             cout << "Form-factors hierarchy computation: " << time(nullptr) - timestamp << " seconds" << endl;
             ofstream out(ss.str(), ios::out | ios::binary);
@@ -136,18 +128,6 @@ class RadiosityProgram : public Hors::Program {
         }
     }
 
-public:
-    RadiosityProgram() {
-        AddArgument("LoD", 1, "");
-        AddArgument("MaxPatchesCount", 5000, "Max count of patches in model.");
-        AddArgument("RecomputeFormFactors", false, "If true, form-factors will be recomputed force.");
-        AddArgument("FormFactorsDir", "FF", "Directory with form-factors.");
-        AddArgument("ScenePropertiesFile", "", "File with scene properties.");
-        AddArgument("DataDir", "", "Directory with scene chunks.");
-        AddArgument("MaxHierarchyDepth", 4, "");
-        AddArgument("Bounces", 3, "");
-    }
-
     void PrepareBuffers() {
         materialsEmission = sceneProperties->GetEmissionColors();
         materialColors = sceneProperties->GetDiffuseColors();
@@ -194,7 +174,6 @@ public:
 
         quadPointsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(perQuadPositions);
         quadColorsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(perQuadColors);
-        quadNormalsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(quadsNormals);
         for (const auto &indexBuffer : indexBuffers) {
             perMaterialIndices.push_back(Hors::GenAndFillBuffer<GL_ELEMENT_ARRAY_BUFFER>(indexBuffer));
             perMaterialQuads.push_back(static_cast<unsigned int &&>(indexBuffer.size()));
@@ -219,10 +198,6 @@ public:
         glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
         glEnableVertexAttribArray(1); CHECK_GL_ERRORS;
 
-        glBindBuffer(GL_ARRAY_BUFFER, *quadNormalsBuffer); CHECK_GL_ERRORS;
-        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
-        glEnableVertexAttribArray(2); CHECK_GL_ERRORS;
-
         glEnable(GL_DEPTH_TEST); CHECK_GL_ERRORS;
 
         const auto cameras = sceneProperties->GetCameras(Get<Hors::WindowSize>("WindowSize").GetScreenRadio());
@@ -246,7 +221,7 @@ public:
         std::vector<std::vector<uint> > indices;
         for (auto &SceneMesh : SceneMeshes) {
             std::vector<glm::vec4> meshPoints(SceneMesh.getVerticesNumber());
-            for (uint k = 0; k < points.size(); ++k) {
+            for (uint k = 0; k < meshPoints.size(); ++k) {
                 meshPoints[k] = glm::make_vec4(SceneMesh.getVertexPositionsFloat4Array() + k * 4);
             }
             std::vector<uint> meshIndices(
@@ -257,80 +232,6 @@ public:
             indices.emplace_back(meshIndices);
         }
         return ComputeFormFactorsEmbree(quadsHierarchy, points, indices, Get<uint>("MaxHierarchyDepth"));
-    }
-
-    void SetLight() {
-        const auto globQuads = ExtractQuadsFromScene(SceneMeshes);
-        for (const auto &globQuad : globQuads) {
-            if (globQuad.GetMaterialId() == 7) { ///SCENE DEPENDENT!!!
-                glm::vec4 point = globQuad.GetVertices()[0].GetPoint();
-                point = glm::min(point, globQuad.GetVertices()[1].GetPoint());
-                point = glm::min(point, globQuad.GetVertices()[2].GetPoint());
-                point = glm::min(point, globQuad.GetVertices()[3].GetPoint());
-                point.w = globQuad.GetVertices()[2].GetPoint().x - point.x;
-                lightCenter = glm::vec3(point);
-                lightCenter += point.w * 0.5f;
-                lightSide = point.w;
-                Hors::SetUniform(QuadRender, "lightPosAndSide", point);
-                Hors::SetUniform(QuadRender, "lightColor", materialsEmission[globQuad.GetMaterialId()]);
-                Hors::SetUniform(QuadRender, "lightNormal", globQuad.GetNormal());
-            }
-        }
-    }
-
-    void CreateShadowMap() {
-        glGenTextures(1, &shadowMapTex); CHECK_GL_ERRORS;
-        glBindTexture(GL_TEXTURE_2D, shadowMapTex); CHECK_GL_ERRORS;
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); CHECK_GL_ERRORS;
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); CHECK_GL_ERRORS;
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); CHECK_GL_ERRORS;
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); CHECK_GL_ERRORS;
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32, 1024, 1024, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr); CHECK_GL_ERRORS;
-
-        GLuint fb;
-        glGenFramebuffers(1, &fb); CHECK_GL_ERRORS;
-        glBindFramebuffer(GL_FRAMEBUFFER, fb); CHECK_GL_ERRORS;
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowMapTex, 0); CHECK_GL_ERRORS;
-
-        GLenum status;
-        status = glCheckFramebufferStatus(GL_FRAMEBUFFER); CHECK_GL_ERRORS;
-        if (status != GL_FRAMEBUFFER_COMPLETE) {
-            cerr << "Wrong framebuffer. Error: " << status << endl;
-        }
-
-        glDrawBuffer(GL_NONE);
-        glReadBuffer(GL_NONE);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, 1024, 1024);
-        glBindFramebuffer(GL_FRAMEBUFFER, fb);
-
-        GLuint depthRender = Hors::CompileShaderProgram(
-            Hors::ReadAndCompileShader("shaders/Depth.vert", GL_VERTEX_SHADER),
-            Hors::ReadAndCompileShader("shaders/Depth.frag", GL_FRAGMENT_SHADER)
-        );
-
-        const float toPlaneDist = lightSide * 0.5f;
-        Hors::Camera depthCam(lightCenter + glm::vec3(0.f, toPlaneDist, 0.f) / 25.f, glm::vec3(0, -1, 0), glm::vec3(1, 0, 0),
-                              std::atan2(toPlaneDist, lightSide * 0.125f / 16) * (180.0/3.141592653589793238463), 1, toPlaneDist, 100);
-        Hors::SetUniform(QuadRender, "shadowMapMatrix", depthCam.GetMatrix());
-
-        glUseProgram(depthRender); CHECK_GL_ERRORS;
-        Hors::SetUniform(depthRender, "cameraMatrix", depthCam.GetMatrix());
-        glClearColor(0, 0, 0, 0); CHECK_GL_ERRORS;
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); CHECK_GL_ERRORS;
-        for (uint i = 0; i < perMaterialIndices.size(); ++i) {
-            if (i == 7) {
-                continue;
-            }
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *perMaterialIndices[i]); CHECK_GL_ERRORS;
-            glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(perMaterialQuads[i]), GL_UNSIGNED_INT, nullptr); CHECK_GL_ERRORS;
-        }
-        glFinish(); CHECK_GL_ERRORS;
-
-        glBindFramebuffer(GL_FRAMEBUFFER, 0); CHECK_GL_ERRORS;
-        glDeleteFramebuffers(1, &fb); CHECK_GL_ERRORS;
-
-        glViewport(0, 0, 1600, 900);
     }
 
     void MultiplyMatrices(std::vector<std::vector<glm::vec4> >& a, std::vector<std::vector<glm::vec4> > bTransposed) const {
@@ -365,8 +266,18 @@ public:
                 multibounceMatrix[i][i] += 1;
             }
         }
-        MultiplyMatrices(multibounceMatrix, coloredFF);
-        MultiplyMatrices(multibounceMatrix, coloredFF);
+    }
+
+public:
+    RadiosityProgram() {
+        AddArgument("LoD", 1, "");
+        AddArgument("MaxPatchesCount", 5000, "Max count of patches in model.");
+        AddArgument("RecomputeFormFactors", false, "If true, form-factors will be recomputed force.");
+        AddArgument("FormFactorsDir", "FF", "Directory with form-factors.");
+        AddArgument("ScenePropertiesFile", "", "File with scene properties.");
+        AddArgument("DataDir", "", "Directory with scene chunks.");
+        AddArgument("MaxHierarchyDepth", 4, "");
+        AddArgument("Bounces", 3, "");
     }
 
     void Run() final {
@@ -406,10 +317,6 @@ public:
         cout << "FormFactors count: " << formFactorsCount << endl;
         cout << "FormFactors per quad: " << static_cast<float>(formFactorsCount) / hierarchicalFF.size() << endl;
         cout << "Max form factors per quad: " << maxFormFactorsCount << endl;
-
-        SetLight();
-        CreateShadowMap();
-
     }
 
     void RenderFunction() final {
@@ -417,12 +324,7 @@ public:
         Hors::SetUniform(QuadRender, "CameraMatrix", MainCamera.GetMatrix());
         glClearColor(0, 0, 0, 0); CHECK_GL_ERRORS;
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); CHECK_GL_ERRORS;
-        glBindTexture(GL_TEXTURE_2D, shadowMapTex); CHECK_GL_ERRORS;
-        glActiveTexture(GL_TEXTURE0); CHECK_GL_ERRORS;
-        Hors::SetUniform(QuadRender, "shadowMap", 0);
         for (uint i = 0; i < perMaterialIndices.size(); ++i) {
-            Hors::SetUniform(QuadRender, "diffuseColor", materialColors[i]);
-            Hors::SetUniform(QuadRender, "emissionColor", materialsEmission[i]);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *perMaterialIndices[i]); CHECK_GL_ERRORS;
             glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(perMaterialQuads[i]), GL_UNSIGNED_INT, nullptr); CHECK_GL_ERRORS;
         }
