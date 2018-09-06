@@ -1,12 +1,12 @@
 {
   "GLVersion": "4.0",
   "Title": "Radiosity",
-  "WindowSize": "1600x900",
+  "WindowSize": "1024x1024",
   "InputFile": "Scenes/CornellBox/scene.vsgf",
   "DataDir": "Scenes/CornellBox2",
   "LoD": 3,
   "ScenePropertiesFile": "Scenes/CornellBox2/statex_00001.xml",
-  "RecomputeFormFactors": 0,
+  "RecomputeFormFactors": 1,
   "MaxPatchesCount": 110000,
-  "MaxHierarchyDepth": 11
+  "MaxHierarchyDepth": 6
 }

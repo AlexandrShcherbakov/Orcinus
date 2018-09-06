@@ -40,5 +40,5 @@ void main() {
         }
     }
     lighting /= samplesCount * samplesCount;
-	outColor = pow(saturate(quadColor + diffuse * lighting + emissionColor), vec4(1 / 2.2));
+	outColor = pow(saturate(quadColor + diffuse * lighting * 0.000001 + emissionColor * 0.000001), vec4(1 / 2.2));
 }

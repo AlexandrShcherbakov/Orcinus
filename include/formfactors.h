@@ -26,7 +26,7 @@ std::vector<std::map<uint, float> > ComputeFormFactorsEmbree(
 
 std::vector<std::map<int, float> > ComputeFormFactorsEmbree(
     QuadsContainer& quads,
-    const std::vector<std::vector<glm::vec4> >& points,
+    const std::vector<std::vector<glm::vec3> >& points,
     const std::vector<std::vector<uint> >& indices,
     uint maxDepth
 );

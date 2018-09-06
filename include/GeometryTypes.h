@@ -175,7 +175,7 @@ public:
                 glm::vec3(Vertices[(i + 1) % Vertices.size()].GetPoint() - pointOnPlane)
             )));
         }
-        return std::abs(square / 2 - GetSquare()) < 1e-5;
+        return std::abs(square / 2 - GetSquare()) < 1e-13;
     }
 
     glm::vec4 GetNormal() const {

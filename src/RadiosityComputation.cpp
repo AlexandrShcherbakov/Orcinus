@@ -55,9 +55,10 @@ void RemoveUnnecessaryQuads(
             std::array<std::map<int, float>, THREADS_COUNT> updated;
 #pragma omp parallel for num_threads(THREADS_COUNT)
             for (int threadId = 0; threadId < THREADS_COUNT; ++threadId) {
-                for (uint j = ff.size() / THREADS_COUNT * threadId; j < ff.size() / THREADS_COUNT * (threadId + 1); ++j) {
+                for (uint j = ff.size() * threadId / THREADS_COUNT ; j < std::min(ff.size() * (threadId + 1) / THREADS_COUNT, ff.size()); ++j) {
                     updated[threadId].clear();
                     for (const auto it : ff[j]) {
+                        assert(it.first != i);
                         if (it.first > i) {
                             updated[threadId][it.first - 1] = it.second;
                         }

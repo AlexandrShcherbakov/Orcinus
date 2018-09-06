@@ -18,6 +18,7 @@
 #include "formfactors.h"
 #include "tesselation.h"
 #include "RadiosityComputation.h"
+#include "glm/vec3.hpp"
 
 using namespace std;
 
@@ -67,7 +68,6 @@ class RadiosityProgram : public Hors::Program {
         uint size;
         ifstream in(ss.str(), ios::in | ios::binary);
         if (Get<bool>("RecomputeFormFactors") || !in.good()) {
-            assert(!quads.empty());
             const auto globQuads = ExtractQuadsFromScene(SceneMeshes);
             cout << "Start to compute form-factors for " << globQuads.size() << " quads" << endl;
             auto timestamp = time(nullptr);
@@ -250,6 +250,10 @@ public:
         vector<glm::vec4> currentBounce(quadsHierarchy.GetSize(), glm::vec4(0));
         vector<glm::vec4> previousBounce(currentBounce.size(), glm::vec4(0));
         vector<glm::vec4> allBounces(currentBounce.size(), glm::vec4(0));
+        for (uint i = 0; i < currentBounce.size(); ++i) {
+            const auto materialId = quadsHierarchy.GetQuad(i).GetMaterialId();
+            allBounces[i] += materialsEmission[materialId];
+        }
         for (uint i = 0; i < hierarchicalFF.size(); ++i) {
             for (const auto& f : hierarchicalFF[i]) {
                 const auto materialId = quadsHierarchy.GetQuad(f.first).GetMaterialId();
@@ -267,6 +271,7 @@ public:
         }
         for (uint i = 0; i < currentBounce.size(); ++i) {
             previousBounce[i] *= materialColors[quadsHierarchy.GetQuad(i).GetMaterialId()];
+            allBounces[i] += previousBounce[i];
         }
         for (uint bounce = 0; bounce < bouncesCount; ++bounce) {
             for (uint i = 0; i < hierarchicalFF.size(); ++i) {
@@ -294,16 +299,18 @@ public:
     }
 
     std::vector<std::map<int, float> > FormFactorComputationEmbree(QuadsContainer& quadsHierarchy) {
-        std::vector<std::vector<glm::vec4> > points;
+        std::vector<std::vector<glm::vec3> > points;
         std::vector<std::vector<uint> > indices;
-        for (auto &SceneMesh : SceneMeshes) {
-            std::vector<glm::vec4> meshPoints(SceneMesh.getVerticesNumber());
-            for (uint k = 0; k < points.size(); ++k) {
-                meshPoints[k] = glm::make_vec4(SceneMesh.getVertexPositionsFloat4Array() + k * 4);
+        auto matrices = sceneProperties->GetMeshMatrices();
+        for (uint i = 0; i < SceneMeshes.size(); ++i) {
+//            SceneMeshes[i].read(Get("DataDir") + "/" + sceneProperties->GetChunksPaths()[i]);
+            std::vector<glm::vec3> meshPoints(SceneMeshes[i].getVerticesNumber());
+            for (uint k = 0; k < meshPoints.size(); ++k) {
+                meshPoints[k] = glm::make_vec3(SceneMeshes[i].getVertexPositionsFloat4Array() + k * 4);
             }
             std::vector<uint> meshIndices(
-                SceneMesh.getTriangleVertexIndicesArray(),
-                SceneMesh.getTriangleVertexIndicesArray() + SceneMesh.getIndicesNumber()
+                SceneMeshes[i].getTriangleVertexIndicesArray(),
+                SceneMeshes[i].getTriangleVertexIndicesArray() + SceneMeshes[i].getIndicesNumber()
             );
             points.emplace_back(meshPoints);
             indices.emplace_back(meshIndices);
