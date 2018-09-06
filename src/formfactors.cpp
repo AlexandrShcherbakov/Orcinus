@@ -364,7 +364,7 @@ class EmbreeHierarchicalFFJob {
         }
         uint visibilityCount = 0;
         float samplesSum = 0;
-        const float BIAS = 1e-5f;
+        const float BIAS = 1e-7f;
         std::vector<RTCRay16> raysPackets(rays.size() / PACKET_SIZE);
         for (uint k = 0; k < rays.size(); k += PACKET_SIZE) {
             for (uint l = 0; l < PACKET_SIZE; ++l) {
@@ -375,7 +375,7 @@ class EmbreeHierarchicalFFJob {
                 raysPackets[k / PACKET_SIZE].dir_x[l] = rays[k + l].second.x;
                 raysPackets[k / PACKET_SIZE].dir_y[l] = rays[k + l].second.y;
                 raysPackets[k / PACKET_SIZE].dir_z[l] = rays[k + l].second.z;
-                raysPackets[k / PACKET_SIZE].tfar[l] = glm::length(rays[k + l].second) - BIAS;
+                raysPackets[k / PACKET_SIZE].tfar[l] = 1 - BIAS;
                 raysPackets[k / PACKET_SIZE].id[l] = 0;
                 raysPackets[k / PACKET_SIZE].mask[l] = 0;
                 raysPackets[k / PACKET_SIZE].time[l] = 0;
@@ -393,16 +393,16 @@ class EmbreeHierarchicalFFJob {
         for (uint k = 0; k < rays.size(); k += PACKET_SIZE) {
             for (uint l = 0; l < PACKET_SIZE; ++l) {
                 visibilityCount++;
-//                if (raysPackets[k / PACKET_SIZE].tfar[l] < 0.f) {
-//                    continue;
-//                }
-                bool flag = false;
-                for (uint i = 0; i < bigQuads.size() && !flag; ++i) {
-                    flag = bigQuads[i].CheckIntersectionWithVector(rays[k + l].first, rays[k + l].first + rays[k + l].second);
-                }
-                if (flag) {
+                if (raysPackets[k / PACKET_SIZE].tfar[l] < 0.f) {
                     continue;
                 }
+//                bool flag = false;
+//                for (uint i = 0; i < bigQuads.size() && !flag; ++i) {
+//                    flag = bigQuads[i].CheckIntersectionWithVector(rays[k + l].first, rays[k + l].first + rays[k + l].second);
+//                }
+//                if (flag) {
+//                    continue;
+//                }
                 const float rayLength = glm::length(rays[k + l].second);
                 const float cosTheta1 = std::max(glm::dot(Quads.GetQuad(idx1).GetNormal(), glm::normalize(rays[k + l].second)), 0.0f);
                 const float cosTheta2 = std::max(glm::dot(Quads.GetQuad(idx2).GetNormal(), -glm::normalize(rays[k + l].second)), 0.0f);
@@ -442,17 +442,25 @@ public:
         Scene = rtcNewScene(Device); CHECK_EMBREE
         for (uint i = 0; i < points.size(); ++i) {
             RTCGeometry geometry = rtcNewGeometry(Device, RTC_GEOMETRY_TYPE_TRIANGLE); CHECK_EMBREE
-            RTCBuffer indicesBuffer = rtcNewSharedBuffer(
-                Device,
-                reinterpret_cast<void*>(const_cast<unsigned *>(indices[i].data())),
-                indices[i].size() * sizeof(indices[i][0])); CHECK_EMBREE
-            RTCBuffer pointsBuffer = rtcNewSharedBuffer(
-                Device,
-                reinterpret_cast<void*>(const_cast<glm::vec4*>(points[i].data())),
-                points[i].size() * sizeof(points[i][0])); CHECK_EMBREE
+//            RTCBuffer indicesBuffer = rtcNewSharedBuffer(
+//                Device,
+//                reinterpret_cast<void*>(const_cast<unsigned *>(indices[i].data())),
+//                indices[i].size() * sizeof(indices[i][0])); CHECK_EMBREE
+//            RTCBuffer pointsBuffer = rtcNewSharedBuffer(
+//                Device,
+//                reinterpret_cast<void*>(const_cast<glm::vec4*>(points[i].data())),
+//                points[i].size() * sizeof(points[i][0])); CHECK_EMBREE
 
-            rtcSetGeometryBuffer(geometry, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3, indicesBuffer, 0, 0, indices[i].size() / 3); CHECK_EMBREE
-            rtcSetGeometryBuffer(geometry, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3, pointsBuffer, 0, sizeof(float), points[i].size()); CHECK_EMBREE
+//            rtcSetGeometryBuffer(geometry, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3, indicesBuffer, 0, 0, indices[i].size() / 3); CHECK_EMBREE
+//            rtcSetGeometryBuffer(geometry, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3, pointsBuffer, 0, sizeof(float), points[i].size()); CHECK_EMBREE
+            uint* ptrIdx = reinterpret_cast<uint*>(rtcSetNewGeometryBuffer(geometry, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3, sizeof(uint) * 3, indices[i].size() / 3)); CHECK_EMBREE
+            for (uint j = 0; j < indices[i].size(); ++j) {
+                ptrIdx[j] = indices[i][j];
+            }
+            glm::vec3* ptrPnt = reinterpret_cast<glm::vec3*>(rtcSetNewGeometryBuffer(geometry, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3, sizeof(glm::vec3), points[i].size())); CHECK_EMBREE
+            for (uint j = 0; j < points[i].size(); ++j) {
+                ptrPnt[j] =  glm::vec3(points[i][j]);
+            }
             rtcCommitGeometry(geometry); CHECK_EMBREE
             rtcAttachGeometry(Scene, geometry); CHECK_EMBREE
             rtcReleaseGeometry(geometry);
