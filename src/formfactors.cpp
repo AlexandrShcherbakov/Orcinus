@@ -353,7 +353,7 @@ class EmbreeHierarchicalFFJob {
             return cache[cacheKey];
         }
         const uint PACKET_SIZE = 16;
-        const auto samples = GenerateRandomSamples(PACKET_SIZE);
+        const auto samples = GenerateRandomSamples(2 * PACKET_SIZE);
 
         std::vector<std::pair<glm::vec4, glm::vec4> > rays;
         for (const auto firstQuadSample : samples) {
@@ -364,18 +364,18 @@ class EmbreeHierarchicalFFJob {
         }
         uint visibilityCount = 0;
         float samplesSum = 0;
-//        const float BIAS = 1e-7f;
+        const float BIAS = 1e-7f;
         std::vector<RTCRay16> raysPackets(rays.size() / PACKET_SIZE);
         for (uint k = 0; k < rays.size(); k += PACKET_SIZE) {
             for (uint l = 0; l < PACKET_SIZE; ++l) {
                 raysPackets[k / PACKET_SIZE].org_x[l] = rays[k + l].first.x;
                 raysPackets[k / PACKET_SIZE].org_y[l] = rays[k + l].first.y;
                 raysPackets[k / PACKET_SIZE].org_z[l] = rays[k + l].first.z;
-                raysPackets[k / PACKET_SIZE].tnear[l] = 0.1f;
+                raysPackets[k / PACKET_SIZE].tnear[l] = BIAS;
                 raysPackets[k / PACKET_SIZE].dir_x[l] = rays[k + l].second.x;
                 raysPackets[k / PACKET_SIZE].dir_y[l] = rays[k + l].second.y;
                 raysPackets[k / PACKET_SIZE].dir_z[l] = rays[k + l].second.z;
-                raysPackets[k / PACKET_SIZE].tfar[l] = glm::length(rays[k + l].second) - 0.1f;
+                raysPackets[k / PACKET_SIZE].tfar[l] = 1 - BIAS;
                 raysPackets[k / PACKET_SIZE].id[l] = 0;
                 raysPackets[k / PACKET_SIZE].mask[l] = 0;
                 raysPackets[k / PACKET_SIZE].time[l] = 0;
@@ -390,7 +390,7 @@ class EmbreeHierarchicalFFJob {
         for (uint k = 0; k < rays.size(); k += PACKET_SIZE) {
             for (uint l = 0; l < PACKET_SIZE; ++l) {
                 visibilityCount++;
-                if (raysPackets[k / PACKET_SIZE].tfar[l] < -0.1f) {
+                if (raysPackets[k / PACKET_SIZE].tfar[l] < 0) {
                     continue;
                 }
 //                bool flag = false;
@@ -404,7 +404,7 @@ class EmbreeHierarchicalFFJob {
                 const float cosTheta1 = std::max(glm::dot(Quads.GetQuad(idx1).GetNormal(), glm::normalize(rays[k + l].second)), 0.0f);
                 const float cosTheta2 = std::max(glm::dot(Quads.GetQuad(idx2).GetNormal(), -glm::normalize(rays[k + l].second)), 0.0f);
                 const float sampleValue = cosTheta1 * cosTheta2 / sqr(rayLength);
-                if (sampleValue < 0.5 * sqr(samples.size()) * static_cast<float>(M_PI)) {
+                if (sampleValue < sqr(samples.size()) * static_cast<float>(M_PI)) {
                     samplesSum += sampleValue;
                 } else {
                     visibilityCount--;

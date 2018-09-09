@@ -77,7 +77,9 @@ class RadiosityProgram : public Hors::Program {
             hierarchicalFF = FormFactorComputationEmbree(quadsHierarchy);
             std::cout << quadsHierarchy.GetSize() << ' ' << hierarchicalFF.size() << endl;
             cout << "Before compress: " << hierarchicalFF.size() << endl;
+            timestamp = time(nullptr);
             RemoveUnnecessaryQuads(quadsHierarchy, hierarchicalFF);
+            cout << "Time: " << static_cast<float>(time(nullptr) - timestamp)  << " sec" << endl;
             cout << "After compress: " << hierarchicalFF.size() << endl;
             std::cout << quadsHierarchy.GetSize() << ' ' << hierarchicalFF.size() << endl;
             cout << "Form-factors hierarchy computation: " << time(nullptr) - timestamp << " seconds" << endl;
@@ -250,28 +252,20 @@ public:
         vector<glm::vec4> currentBounce(quadsHierarchy.GetSize(), glm::vec4(0));
         vector<glm::vec4> previousBounce(currentBounce.size(), glm::vec4(0));
         vector<glm::vec4> allBounces(currentBounce.size(), glm::vec4(0));
+        vector<int> parents(quadsHierarchy.GetSize(), -1);
         for (uint i = 0; i < currentBounce.size(); ++i) {
             const auto materialId = quadsHierarchy.GetQuad(i).GetMaterialId();
             allBounces[i] += materialsEmission[materialId];
-        }
-        for (uint i = 0; i < hierarchicalFF.size(); ++i) {
-            for (const auto& f : hierarchicalFF[i]) {
-                const auto materialId = quadsHierarchy.GetQuad(f.first).GetMaterialId();
-                previousBounce[i] += materialsEmission[materialId] * f.second;
-            }
+            previousBounce[i] = materialsEmission[materialId];
             if (quadsHierarchy.HasChildren(i)) {
                 const auto children = quadsHierarchy.GetChildren(i);
                 if (children.first != -1) {
-                    previousBounce[children.first] += previousBounce[i];
+                    parents[children.first] = i;
                 }
                 if (children.second != -1) {
-                    previousBounce[children.second] += previousBounce[i];
+                    parents[children.second] = i;
                 }
             }
-        }
-        for (uint i = 0; i < currentBounce.size(); ++i) {
-            previousBounce[i] *= materialColors[quadsHierarchy.GetQuad(i).GetMaterialId()];
-            allBounces[i] += previousBounce[i];
         }
         for (uint bounce = 0; bounce < bouncesCount; ++bounce) {
             for (uint i = 0; i < hierarchicalFF.size(); ++i) {
@@ -286,6 +280,19 @@ public:
                     if (children.second != -1) {
                         currentBounce[children.second] += currentBounce[i];
                     }
+                }
+            }
+            for (int i = hierarchicalFF.size() - 1; i >= 0; --i) {
+                if (quadsHierarchy.HasChildren(i)) {
+                    glm::vec4 res = glm::vec4(0);
+                    const auto children = quadsHierarchy.GetChildren(i);
+                    if (children.first != -1) {
+                        res += currentBounce[children.first];
+                    }
+                    if (children.second != -1) {
+                        res += currentBounce[children.second];
+                    }
+                    currentBounce[i] = res * 0.5f;
                 }
             }
             for (uint i = 0; i < currentBounce.size(); ++i) {

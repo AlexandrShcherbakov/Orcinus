@@ -6,7 +6,8 @@
   "DataDir": "Scenes/CornellBox2",
   "LoD": 3,
   "ScenePropertiesFile": "Scenes/CornellBox2/statex_00001.xml",
-  "RecomputeFormFactors": 1,
+  "RecomputeFormFactors": 0,
   "MaxPatchesCount": 110000,
-  "MaxHierarchyDepth": 6
+  "MaxHierarchyDepth": 12,
+  "Bounces": 5
 }

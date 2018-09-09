@@ -10,6 +10,8 @@
 #include <unordered_set>
 #include <utility>
 
+#include <omp.h>
+
 
 std::vector<glm::vec4> RecomputeColorsForQuadsCPU(
     const std::vector<std::map<uint, float> > & ff,
@@ -53,22 +55,22 @@ void RemoveUnnecessaryQuads(
             ff.erase(ff.begin() + i);
             const int THREADS_COUNT = 10;
             std::array<std::map<int, float>, THREADS_COUNT> updated;
-#pragma omp parallel for num_threads(THREADS_COUNT)
-            for (int threadId = 0; threadId < THREADS_COUNT; ++threadId) {
-                for (uint j = ff.size() * threadId / THREADS_COUNT ; j < std::min(ff.size() * (threadId + 1) / THREADS_COUNT, ff.size()); ++j) {
-                    updated[threadId].clear();
-                    for (const auto it : ff[j]) {
-                        assert(it.first != i);
-                        if (it.first > i) {
-                            updated[threadId][it.first - 1] = it.second;
-                        }
+            int threadId;
+#pragma omp parallel for num_threads(THREADS_COUNT) private(threadId)
+            for (uint j = 0 ; j < ff.size(); ++j) {
+                threadId = omp_get_thread_num();
+                updated[threadId].clear();
+                for (const auto it : ff[j]) {
+                    assert(it.first != i);
+                    if (it.first > i) {
+                        updated[threadId][it.first - 1] = it.second;
                     }
-                    for (const auto it : updated[threadId]) {
-                        ff[j].erase(it.first + 1);
-                    }
-                    for (const auto it : updated[threadId]) {
-                        ff[j][it.first] = it.second;
-                    }
+                }
+                for (const auto it : updated[threadId]) {
+                    ff[j].erase(it.first + 1);
+                }
+                for (const auto it : updated[threadId]) {
+                    ff[j][it.first] = it.second;
                 }
             }
         }
