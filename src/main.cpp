@@ -42,6 +42,11 @@ public:
     }
 };
 
+template<typename T>
+void writeBin(ofstream& out, const T t) {
+    out.write(reinterpret_cast<const char*>(&t), sizeof(t));
+}
+
 class RadiosityProgram : public Hors::Program {
     std::vector<HydraGeomData> SceneMeshes;
     std::vector<Quad> quads = {};
@@ -57,7 +62,7 @@ class RadiosityProgram : public Hors::Program {
     std::vector<uint> renderedQuads;
     std::vector<glm::vec4> materialsEmission;
     std::vector<glm::vec4> materialColors;
-    std::vector<std::vector<glm::vec4> > multibounceMatrix;
+    std::vector<std::vector<glm::vec3> > multibounceMatrix;
 
     void LoadFormFactorsHierarchy() {
         std::stringstream ss;
@@ -128,14 +133,47 @@ class RadiosityProgram : public Hors::Program {
         }
     }
 
+    void dumpFFMatrix() {
+        std::stringstream ss;
+        ss << Get("DataDir") << "/Dumps/FlatFF" << Get<int>("MaxHierarchyDepth") << ".bin";
+        uint size = hierarchicalFF.size();
+        ofstream out(ss.str(), ios::out | ios::binary);
+        writeBin(out, size);
+        for (uint i = 0; i < size; ++i) {
+            const uint rowSize = hierarchicalFF[i].size();
+            writeBin(out, rowSize);
+            for (const auto& p : hierarchicalFF[i]) {
+                writeBin(out, p.first);
+                writeBin(out, p.second);
+            }
+        }
+        out.close();
+    }
+
+    void dumpMultibounceMatrix() {
+        std::stringstream ss;
+        ss << Get("DataDir") << "/Dumps/MultibounceFF" << Get<int>("MaxHierarchyDepth") << ".bin";
+        uint size = multibounceMatrix.size();
+        ofstream out(ss.str(), ios::out | ios::binary);
+        writeBin(out, size);
+        for (uint i = 0; i < size; ++i) {
+            for (const auto& f : multibounceMatrix[i]) {
+                writeBin(out, f);
+            }
+        }
+        out.close();
+    }
+
     void PrepareBuffers() {
         materialsEmission = sceneProperties->GetEmissionColors();
         materialColors = sceneProperties->GetDiffuseColors();
 
+//        dumpFFMatrix();
         {
             LabeledTimer timer("Multibounce matrix computation");
-            ComputeMultibounceMatrix();
+            ComputeMultibounceMatrix_v2();
         }
+//        dumpMultibounceMatrix();
 
         vector<glm::vec4> firstBounce;
         {
@@ -208,10 +246,13 @@ class RadiosityProgram : public Hors::Program {
     vector<glm::vec4> computeIndirectLighting(const uint bouncesCount) {
         vector<glm::vec4> allBounces(multibounceMatrix.size(), glm::vec4(0));
         for (uint i = 0; i < multibounceMatrix.size(); ++i) {
+            const auto targetId = quadsHierarchy.GetQuad(i).GetMaterialId();
             for (uint j = 0; j < multibounceMatrix[i].size(); ++j) {
                 const auto materialId = quadsHierarchy.GetQuad(j).GetMaterialId();
-                allBounces[i] += materialsEmission[materialId] * multibounceMatrix[i][j];
+                allBounces[i] += materialsEmission[materialId] * glm::make_vec4(multibounceMatrix[i][j]);
             }
+            allBounces[i] *= materialColors[targetId];
+            allBounces[i] += materialsEmission[targetId];
         }
         return allBounces;
     }
@@ -234,12 +275,12 @@ class RadiosityProgram : public Hors::Program {
         return ComputeFormFactorsEmbree(quadsHierarchy, points, indices, Get<uint>("MaxHierarchyDepth"));
     }
 
-    void MultiplyMatrices(std::vector<std::vector<glm::vec4> >& a, std::vector<std::vector<glm::vec4> > bTransposed) const {
+    void MultiplyMatrices(std::vector<std::vector<glm::vec3> >& a, std::vector<std::vector<glm::vec3> > bTransposed) const {
         const uint size = a.size();
         const auto originCopy = a;
         for (uint i = 0; i < size; ++i) {
             for (uint j = 0; j < size; ++j) {
-                a[i][j] = glm::vec4(0);
+                a[i][j] = glm::vec3(0);
                 for (uint k = 0; k < size; ++k) {
                     a[i][j] += originCopy[i][k] * bTransposed[j][k];
                 }
@@ -248,22 +289,76 @@ class RadiosityProgram : public Hors::Program {
     }
 
     void ComputeMultibounceMatrix() {
-        std::vector<std::vector<glm::vec4> > coloredFF(hierarchicalFF.size());
+        std::vector<std::vector<glm::vec3> > coloredFF(hierarchicalFF.size());
         for (uint i = 0; i < coloredFF.size(); ++i) {
-            coloredFF[i].assign(hierarchicalFF.size(), glm::vec4(0));
+            coloredFF[i].assign(hierarchicalFF.size(), glm::vec3(0));
             for (uint j = 0; j < coloredFF[i].size(); ++j) {
                 if (hierarchicalFF[i].count(j)) {
-                    coloredFF[i][j] = hierarchicalFF[j][i] * materialColors[quadsHierarchy.GetQuad(j).GetMaterialId()];
+                    coloredFF[i][j] = hierarchicalFF[j][i] * glm::vec3(materialColors[quadsHierarchy.GetQuad(j).GetMaterialId()]);
                 }
             }
         }
-        multibounceMatrix.assign(hierarchicalFF.size(), std::vector<glm::vec4>(hierarchicalFF.size(), glm::vec4(0)));
+        multibounceMatrix.assign(hierarchicalFF.size(), std::vector<glm::vec3>(hierarchicalFF.size(), glm::vec3(0)));
         for (int bounce = 0; bounce < Get<int>("Bounces"); ++bounce) {
             if (bounce) {
                 MultiplyMatrices(multibounceMatrix, coloredFF);
             }
             for (uint i = 0; i < multibounceMatrix.size(); ++i) {
                 multibounceMatrix[i][i] += 1;
+            }
+        }
+    }
+
+    void ComputeMultibounceMatrix_v2() {
+        multibounceMatrix.assign(1, std::vector<glm::vec3>(1, glm::vec3(1)));
+        std::vector<glm::vec3> colors(hierarchicalFF.size());
+        for (uint i = 0; i < colors.size(); ++i) {
+            colors[i] = glm::vec3(materialColors[quadsHierarchy.GetQuad(i).GetMaterialId()]);
+        }
+        for (uint i = 1; i < hierarchicalFF.size(); ++i) {
+            std::vector<glm::vec3> fColumn(multibounceMatrix.size());
+            std::vector<glm::vec3> fRow(multibounceMatrix.size());
+            for (uint j = 0; j < fColumn.size(); ++j) {
+                fColumn[j] = glm::vec3(hierarchicalFF[j][i]);
+                fRow[j] = glm::vec3(hierarchicalFF[i][j]);
+            }
+            std::vector<glm::vec3> gColumn(fColumn), gRow(fRow);
+            glm::vec3 doubleReflection(0);
+            for (uint j = 0; j < fColumn.size(); ++j) {
+                doubleReflection += fRow[j] * fColumn[j] * colors[j];
+            }
+            for (uint j = 0; j < fColumn.size(); ++j) {
+                gColumn[j] += fColumn[j] * colors[i] * doubleReflection;
+                gRow[j] += fRow[j] * colors[i] * doubleReflection;
+            }
+            std::vector<glm::vec3> interReflection(fColumn.size(), glm::vec3(0));
+            for (uint j = 0; j < fColumn.size(); ++j) {
+                for (uint k = 0; k < fColumn.size(); ++k) {
+                    interReflection[j] += multibounceMatrix[j][k] * fColumn[k] * colors[k];
+                }
+                gColumn[j] += interReflection[j];
+            }
+            interReflection.assign(fColumn.size(), glm::vec3(0));
+            for (uint j = 0; j < fColumn.size(); ++j) {
+                for (uint k = 0; k < fColumn.size(); ++k) {
+                    interReflection[j] += multibounceMatrix[k][j] * fRow[k] * colors[k];
+                }
+                gRow[j] += interReflection[j];
+            }
+            for (uint j = 0; j < fColumn.size(); ++j) {
+                for (uint k = 0; k < fRow.size(); ++k) {
+                    multibounceMatrix[j][k] += gColumn[j] * gRow[k] * colors[i];
+                }
+            }
+            for (uint j = 0; j < fColumn.size(); ++j) {
+                multibounceMatrix[j].push_back(gColumn[j]);
+            }
+            multibounceMatrix.push_back(gRow);
+            multibounceMatrix.back().push_back(glm::vec3(1));
+            for (uint j = 0; j < gColumn.size(); ++j) {
+                for (uint k = 0; k < gColumn.size(); ++k) {
+                    multibounceMatrix.back().back() += gColumn[j] * gRow[k] * colors[k];
+                }
             }
         }
     }
