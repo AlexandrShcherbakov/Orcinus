@@ -54,7 +54,7 @@ class RadiosityProgram : public Hors::Program {
     std::vector<std::map<int, float> > hierarchicalFF;
     QuadsContainer quadsHierarchy;
 
-    Hors::GLBuffer quadPointsBuffer, quadColorsBuffer;
+    Hors::GLBuffer quadPointsBuffer, quadColorsBuffer, quadUVBuffer;
     std::vector<Hors::GLBuffer> perMaterialIndices;
     std::vector<uint> perMaterialQuads;
     GLuint QuadRender;
@@ -63,6 +63,9 @@ class RadiosityProgram : public Hors::Program {
     std::vector<glm::vec4> materialsEmission;
     std::vector<glm::vec4> materialColors;
     std::vector<std::vector<glm::vec3> > multibounceMatrix;
+    std::vector<glm::vec2> texCoords;
+    std::vector<GLuint> textures;
+    std::vector<int> textureIds;
 
     void LoadFormFactorsHierarchy() {
         std::stringstream ss;
@@ -72,41 +75,41 @@ class RadiosityProgram : public Hors::Program {
         if (Get<bool>("RecomputeFormFactors") || !in.good()) {
             const auto globQuads = ExtractQuadsFromScene(SceneMeshes);
             cout << "Start to compute form-factors for " << globQuads.size() << " quads" << endl;
-            auto timestamp = time(nullptr);
+//            auto timestamp = time(nullptr);
             for (const auto& quad: globQuads) {
                 quadsHierarchy.AddQuad(quad);
             }
-            hierarchicalFF = FormFactorComputationEmbree(quadsHierarchy);
-            std::cout << quadsHierarchy.GetSize() << ' ' << hierarchicalFF.size() << endl;
-            cout << "Form-factors hierarchy computation: " << time(nullptr) - timestamp << " seconds" << endl;
-            ofstream out(ss.str(), ios::out | ios::binary);
-            size = static_cast<uint>(quadsHierarchy.GetSize());
-            out.write(reinterpret_cast<char*>(&size), sizeof(size));
-            for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
-                const auto quad = quadsHierarchy.GetQuad(i);
-                for (const auto& v: quad.GetVertices()) {
-                    const auto point = v.GetPoint();
-                    const auto normal = v.GetNormal();
-                    const auto texCoord = v.GetTextureCoordinates();
-                    const auto matId = v.GetMaterialNumber();
-                    out.write(reinterpret_cast<const char*>(&point), sizeof(point));
-                    out.write(reinterpret_cast<const char*>(&normal), sizeof(normal));
-                    out.write(reinterpret_cast<const char*>(&texCoord), sizeof(texCoord));
-                    out.write(reinterpret_cast<const char*>(&matId), sizeof(matId));
-                }
-                const uint rowSize = hierarchicalFF[i].size();
-                out.write(reinterpret_cast<const char*>(&rowSize), sizeof(rowSize));
-                for (auto& item: hierarchicalFF[i]) {
-                    out.write(reinterpret_cast<const char*>(&item.first), sizeof(item.first));
-                    out.write(reinterpret_cast<char*>(&item.second), sizeof(item.second));
-                }
-            }
-            in.close();
-            out.close();
+//            hierarchicalFF = FormFactorComputationEmbree(quadsHierarchy);
+//            std::cout << quadsHierarchy.GetSize() << ' ' << hierarchicalFF.size() << endl;
+//            cout << "Form-factors hierarchy computation: " << time(nullptr) - timestamp << " seconds" << endl;
+//            ofstream out(ss.str(), ios::out | ios::binary);
+//            size = static_cast<uint>(quadsHierarchy.GetSize());
+//            out.write(reinterpret_cast<char*>(&size), sizeof(size));
+//            for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
+//                const auto quad = quadsHierarchy.GetQuad(i);
+//                for (const auto& v: quad.GetVertices()) {
+//                    const auto point = v.GetPoint();
+//                    const auto normal = v.GetNormal();
+//                    const auto texCoord = v.GetTextureCoordinates();
+//                    const auto matId = v.GetMaterialNumber();
+//                    out.write(reinterpret_cast<const char*>(&point), sizeof(point));
+//                    out.write(reinterpret_cast<const char*>(&normal), sizeof(normal));
+//                    out.write(reinterpret_cast<const char*>(&texCoord), sizeof(texCoord));
+//                    out.write(reinterpret_cast<const char*>(&matId), sizeof(matId));
+//                }
+//                const uint rowSize = hierarchicalFF[i].size();
+//                out.write(reinterpret_cast<const char*>(&rowSize), sizeof(rowSize));
+//                for (auto& item: hierarchicalFF[i]) {
+//                    out.write(reinterpret_cast<const char*>(&item.first), sizeof(item.first));
+//                    out.write(reinterpret_cast<char*>(&item.second), sizeof(item.second));
+//                }
+//            }
+//            in.close();
+//            out.close();
             return;
         }
         in.read(reinterpret_cast<char*>(&size), sizeof(size));
-        hierarchicalFF.resize(size);
+//        hierarchicalFF.resize(size);
         for (uint i = 0; i < size; ++i) {
             array<ModelVertex, 4> vertices;
             for (auto &vertex : vertices) {
@@ -121,15 +124,15 @@ class RadiosityProgram : public Hors::Program {
                 vertex = ModelVertex(point, normal, texCoord, matId);
             }
             quadsHierarchy.AddQuad(Quad(vertices[0], vertices[1], vertices[2], vertices[3]));
-            uint rowSize = 0;
-            in.read(reinterpret_cast<char*>(&rowSize), sizeof(rowSize));
-            for (uint j = 0; j < rowSize; ++j) {
-                int key;
-                float value;
-                in.read(reinterpret_cast<char*>(&key), sizeof(key));
-                in.read(reinterpret_cast<char*>(&value), sizeof(value));
-                hierarchicalFF[i][key] = value;
-            }
+//            uint rowSize = 0;
+//            in.read(reinterpret_cast<char*>(&rowSize), sizeof(rowSize));
+//            for (uint j = 0; j < rowSize; ++j) {
+//                int key;
+//                float value;
+//                in.read(reinterpret_cast<char*>(&key), sizeof(key));
+//                in.read(reinterpret_cast<char*>(&value), sizeof(value));
+//                hierarchicalFF[i][key] = value;
+//            }
         }
     }
 
@@ -171,7 +174,7 @@ class RadiosityProgram : public Hors::Program {
 //        dumpFFMatrix();
         {
             LabeledTimer timer("Multibounce matrix computation");
-            ComputeMultibounceMatrix_v2();
+//            ComputeMultibounceMatrix_v2();
         }
 //        dumpMultibounceMatrix();
 
@@ -201,17 +204,20 @@ class RadiosityProgram : public Hors::Program {
             indexBuffers[matId].push_back(static_cast<unsigned int &&>(perQuadPositions.size()));
             indexBuffers[matId].push_back(static_cast<unsigned int &&>(perQuadPositions.size() + 2));
             indexBuffers[matId].push_back(static_cast<unsigned int &&>(perQuadPositions.size() + 3));
-            glm::vec4 randVec = firstBounce[i];
+//            glm::vec4 randVec = firstBounce[i];
             for (const auto& point: quadsHierarchy.GetQuad(i).GetVertices()) {
                 perQuadPositions.push_back(point.GetPoint());
                 quadsNormals.push_back(point.GetNormal());
-                perQuadColors.push_back(randVec);
+                perQuadColors.push_back(point.GetNormal() * 0.5f + 0.5f);
+                texCoords.push_back(point.GetTextureCoordinates());
+//                perQuadColors.push_back(randVec);
             }
             renderedQuads.push_back(static_cast<unsigned int &&>(i));
         }
 
         quadPointsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(perQuadPositions);
         quadColorsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(perQuadColors);
+        quadUVBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(texCoords);
         for (const auto &indexBuffer : indexBuffers) {
             perMaterialIndices.push_back(Hors::GenAndFillBuffer<GL_ELEMENT_ARRAY_BUFFER>(indexBuffer));
             perMaterialQuads.push_back(static_cast<unsigned int &&>(indexBuffer.size()));
@@ -235,6 +241,10 @@ class RadiosityProgram : public Hors::Program {
         glBindBuffer(GL_ARRAY_BUFFER, *quadColorsBuffer); CHECK_GL_ERRORS;
         glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
         glEnableVertexAttribArray(1); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_ARRAY_BUFFER, *quadUVBuffer); CHECK_GL_ERRORS;
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
+        glEnableVertexAttribArray(2); CHECK_GL_ERRORS;
 
         glEnable(GL_DEPTH_TEST); CHECK_GL_ERRORS;
 
@@ -363,6 +373,34 @@ class RadiosityProgram : public Hors::Program {
         }
     }
 
+    GLuint CreateTex(const Hors::SceneProperties::TextureRecordInfo& record) {
+        ifstream in(Get("DataDir") + "/" + record.location, ios::in | ios::binary);
+        assert(in.is_open());
+        in.seekg(record.offset);
+        std::vector<char> data(record.bytesize);
+        for (uint i = 0; i < record.height; ++i) {
+            for (uint j = 0; j < record.width; ++j) {
+                for (uint k = 0; k < 4; ++k) {
+                    in.read(&data[(i * record.width + j) * 4 + k], sizeof(char));
+                }
+            }
+        }
+        GLuint texId;
+        glGenTextures(1, &texId); CHECK_GL_ERRORS;
+        glActiveTexture(GL_TEXTURE0 + record.id);
+        glBindTexture(GL_TEXTURE_2D, texId);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, record.width, record.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data.data()); CHECK_GL_ERRORS;
+        glGenerateMipmap(GL_TEXTURE_2D); CHECK_GL_ERRORS;
+        return texId;
+    }
+
+    void CreateTextures() {
+        const auto records = sceneProperties->GetTextures();
+        for (const auto& rec: records) {
+            textures.push_back(CreateTex(rec));
+        }
+    }
+
 public:
     RadiosityProgram() {
         AddArgument("LoD", 1, "");
@@ -377,6 +415,8 @@ public:
 
     void Run() final {
         sceneProperties = std::make_unique<Hors::SceneProperties>(Get("ScenePropertiesFile"));
+        CreateTextures();
+        textureIds = sceneProperties->GetDiffuseTextures();
         SceneMeshes.resize(sceneProperties->GetChunksPaths().size());
         auto matrices = sceneProperties->GetMeshMatrices();
         for (uint i = 0; i < SceneMeshes.size(); ++i) {
@@ -412,6 +452,8 @@ public:
         cout << "FormFactors count: " << formFactorsCount << endl;
         cout << "FormFactors per quad: " << static_cast<float>(formFactorsCount) / hierarchicalFF.size() << endl;
         cout << "Max form factors per quad: " << maxFormFactorsCount << endl;
+
+//        Hors::SetUniform(QuadRender, "Tex", 2);
     }
 
     void RenderFunction() final {
@@ -420,6 +462,10 @@ public:
         glClearColor(0, 0, 0, 0); CHECK_GL_ERRORS;
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); CHECK_GL_ERRORS;
         for (uint i = 0; i < perMaterialIndices.size(); ++i) {
+            if (textureIds[i] == -1) {
+                continue;
+            }
+            Hors::SetUniform(QuadRender, "Tex", textureIds[i]);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *perMaterialIndices[i]); CHECK_GL_ERRORS;
             glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(perMaterialQuads[i]), GL_UNSIGNED_INT, nullptr); CHECK_GL_ERRORS;
         }

@@ -5,6 +5,7 @@
 #include "tesselation.h"
 
 #include <algorithm>
+#include <iostream>
 
 std::vector<Quad> ExtractQuadsFromScene(const std::vector<HydraGeomData>& meshes) {
     std::vector<Quad> quads;
@@ -17,6 +18,41 @@ std::vector<Quad> ExtractQuadsFromScene(const std::vector<HydraGeomData>& meshes
 
 std::vector<Quad> ExtractQuadsFromScene(const HydraGeomData& data) {
     const uint indicesCount = data.getIndicesNumber();
+
+    std::vector<bool> used(indicesCount / 3, false);
+    std::vector<Quad> result;
+    for (uint i = 0; i < indicesCount; i += 3) {
+        for (uint j = i + 3; j < indicesCount; j += 3) {
+            if (used[j / 3]) {
+                continue;
+            }
+            std::vector<uint> matchedIndices;
+            std::vector<uint> secondTriangleMatchedIndices;
+            for (uint k = 0; k < 3; ++k) {
+                for (uint h = 0; h < 3; ++h) {
+                    if (data.getTriangleVertexIndicesArray()[i + k] == data.getTriangleVertexIndicesArray()[j + h]) {
+                        matchedIndices.push_back(k);
+                        secondTriangleMatchedIndices.push_back(h);
+                    }
+                }
+            }
+            assert(matchedIndices.size() < 3);
+            if (matchedIndices.size() != 2) {
+                continue;
+            }
+            const uint notMatchedIdx = 3 - matchedIndices[0] - matchedIndices[1];
+            const ModelVertex matched1(data, i + matchedIndices[0]);
+            const ModelVertex matched2(data, i + matchedIndices[1]);
+            const ModelVertex unmatched(data, i + notMatchedIdx);
+            if (distance(matched1, matched2) + 1e-5 < std::max(distance(matched1, unmatched), distance(matched2, unmatched))) {
+                continue;
+            }
+            const uint forthIndex = 3 - secondTriangleMatchedIndices[0] - secondTriangleMatchedIndices[1];
+            result.emplace_back(matched1, unmatched, matched2, ModelVertex(data, j + forthIndex));
+            used[j / 3] = true;
+        }
+    }
+    return result;
 
     std::vector<glm::vec4> planes;
     std::vector<std::vector<ModelVertex> > vertices;
@@ -38,15 +74,13 @@ std::vector<Quad> ExtractQuadsFromScene(const HydraGeomData& data) {
         std::vector<uint>& counter = counters[planeIndex];
         auto itVertex = find(locVertices.begin(), locVertices.end(), vertex);
         if (itVertex == locVertices.end()) {
-            locVertices.insert(itVertex, vertex);
+            itVertex = locVertices.insert(itVertex, vertex);
             counter.push_back(0);
-            itVertex = locVertices.end() - 1;
         }
         const auto vertexIndex = itVertex - locVertices.begin();
         counter[vertexIndex]++;
     }
 
-    std::vector<Quad> result;
     for (uint i = 0; i < planes.size(); ++i) {
         std::vector<ModelVertex>& locVertices = vertices[i];
         std::vector<uint>& counter = counters[i];

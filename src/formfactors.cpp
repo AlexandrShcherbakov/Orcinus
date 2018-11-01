@@ -425,7 +425,7 @@ class EmbreeHierarchicalFFJob {
 
     void ProcessTwoQuads(const int idx1, const int idx2) {
         const float ff = GetTwoQuadsFF(idx1, idx2);
-        if (!ff) {
+        if (ff < 1e-8f) {
             return;
         }
         FF[idx1][idx2] = ff / Quads.GetQuad(idx1).GetSquare();
@@ -442,17 +442,6 @@ public:
         Scene = rtcNewScene(Device); CHECK_EMBREE
         for (uint i = 0; i < points.size(); ++i) {
             RTCGeometry geometry = rtcNewGeometry(Device, RTC_GEOMETRY_TYPE_TRIANGLE); CHECK_EMBREE
-//            RTCBuffer indicesBuffer = rtcNewSharedBuffer(
-//                Device,
-//                reinterpret_cast<void*>(const_cast<unsigned *>(indices[i].data())),
-//                indices[i].size() * sizeof(indices[i][0])); CHECK_EMBREE
-//            RTCBuffer pointsBuffer = rtcNewSharedBuffer(
-//                Device,
-//                reinterpret_cast<void*>(const_cast<glm::vec4*>(points[i].data())),
-//                points[i].size() * sizeof(points[i][0])); CHECK_EMBREE
-
-//            rtcSetGeometryBuffer(geometry, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3, indicesBuffer, 0, 0, indices[i].size() / 3); CHECK_EMBREE
-//            rtcSetGeometryBuffer(geometry, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3, pointsBuffer, 0, sizeof(float), points[i].size()); CHECK_EMBREE
             uint* ptrIdx = reinterpret_cast<uint*>(rtcSetNewGeometryBuffer(geometry, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3, sizeof(uint) * 3, indices[i].size() / 3)); CHECK_EMBREE
             for (uint j = 0; j < indices[i].size(); ++j) {
                 ptrIdx[j] = indices[i][j];
@@ -477,24 +466,27 @@ public:
     }
 
     std::vector<std::map<int, float> > Execute(const uint maxDepth) {
-        std::vector<Quad> result;
-        for (int i = 0; i < Quads.GetSize(); ++i) {
-            bigQuads.push_back(Quads.GetQuad(i));
-            const auto subdivision = Quads.GetQuad(i).Tessellate(maxDepth);
-            result.insert(result.end(), subdivision.begin(), subdivision.end());
-        }
-        const int initSizeCount = Quads.GetSize();
-        for (int i = initSizeCount - 1; i >= 0; --i) {
-            Quads.RemoveQuad(i);
-        }
-        for (const auto &i : result) {
-            Quads.AddQuad(i);
-        }
+//        std::vector<Quad> result;
+//        for (int i = 0; i < Quads.GetSize(); ++i) {
+//            bigQuads.push_back(Quads.GetQuad(i));
+//            const auto subdivision = Quads.GetQuad(i).Tessellate(maxDepth);
+//            result.insert(result.end(), subdivision.begin(), subdivision.end());
+//        }
+//        const int initSizeCount = Quads.GetSize();
+//        for (int i = initSizeCount - 1; i >= 0; --i) {
+//            Quads.RemoveQuad(i);
+//        }
+//        for (const auto &i : result) {
+//            Quads.AddQuad(i);
+//        }
         FF.resize(static_cast<unsigned long>(Quads.GetSize()));
+        uint sum = 0;
         for (int i = 0; i < Quads.GetSize(); ++i) {
             for (int j = i + 1; j < Quads.GetSize(); ++j) {
                 ProcessTwoQuads(i, j);
             }
+            sum += FF[i].size();
+            std::cout << i << "-th patch processed. " << sum << " values total." << std::endl;
         }
         return FF;
     }
