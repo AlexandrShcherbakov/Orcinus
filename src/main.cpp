@@ -66,6 +66,7 @@ class RadiosityProgram : public Hors::Program {
     std::vector<glm::vec2> texCoords;
     std::vector<GLuint> textures;
     std::vector<int> textureIds;
+    bool renderLines = false;
 
     void LoadFormFactorsHierarchy() {
         std::stringstream ss;
@@ -453,7 +454,7 @@ public:
         cout << "FormFactors per quad: " << static_cast<float>(formFactorsCount) / hierarchicalFF.size() << endl;
         cout << "Max form factors per quad: " << maxFormFactorsCount << endl;
 
-//        Hors::SetUniform(QuadRender, "Tex", 2);
+        AddKeyboardEvent('z', [this](){ renderLines = !renderLines; });
     }
 
     void RenderFunction() final {
@@ -461,6 +462,7 @@ public:
         Hors::SetUniform(QuadRender, "CameraMatrix", MainCamera.GetMatrix());
         glClearColor(0, 0, 0, 0); CHECK_GL_ERRORS;
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); CHECK_GL_ERRORS;
+        glPolygonMode(GL_FRONT_AND_BACK, renderLines ? GL_LINE : GL_FILL);
         for (uint i = 0; i < perMaterialIndices.size(); ++i) {
             if (textureIds[i] == -1) {
                 continue;
