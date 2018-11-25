@@ -341,17 +341,13 @@ class EmbreeHierarchicalFFJob {
     RTCDevice Device;
     RTCScene Scene;
     QuadsContainer& Quads;
-    std::vector<std::map<int, float> > FF;
+    std::vector<std::vector<std::pair<int, float> > > FF;
     RTCIntersectContext IntersectionContext;
     const float EPS = 1e-7;
     std::map<std::pair<int, int>, float> cache;
     std::vector<Quad> bigQuads;
 
     float GetTwoQuadsFF(const int idx1, const int idx2) {
-        const auto cacheKey = std::make_pair(std::min(idx1, idx2), std::max(idx1, idx2));
-        if (cache.count(cacheKey)) {
-            return cache[cacheKey];
-        }
         const uint PACKET_SIZE = 16;
         const auto samples = GenerateRandomSamples(PACKET_SIZE * 2);
 
@@ -382,6 +378,7 @@ class EmbreeHierarchicalFFJob {
             }
         }
 
+#pragma omp parallel for
         for (uint k = 0; k < rays.size(); k += PACKET_SIZE) {
             const int validMask = ~0u;
             rtcInitIntersectContext(&IntersectionContext); CHECK_EMBREE
@@ -416,11 +413,10 @@ class EmbreeHierarchicalFFJob {
             }
         }
 
-        cache[cacheKey] = 0;
         if (visibilityCount && samplesSum) {
-            cache[cacheKey] = samplesSum / visibilityCount / static_cast<float>(M_PI) * Quads.GetQuad(idx1).GetSquare() * Quads.GetQuad(idx2).GetSquare();
+            return samplesSum / visibilityCount / static_cast<float>(M_PI) * Quads.GetQuad(idx1).GetSquare() * Quads.GetQuad(idx2).GetSquare();
         }
-        return cache[cacheKey];
+        return 0;
     }
 
     void ProcessTwoQuads(const int idx1, const int idx2) {
@@ -428,8 +424,8 @@ class EmbreeHierarchicalFFJob {
         if (ff < 1e-8f) {
             return;
         }
-        FF[idx1][idx2] = ff / Quads.GetQuad(idx1).GetSquare();
-        FF[idx2][idx1] = ff / Quads.GetQuad(idx2).GetSquare();
+        FF[idx1].emplace_back(idx2, ff / Quads.GetQuad(idx1).GetSquare());
+        FF[idx2].emplace_back(idx1, ff / Quads.GetQuad(idx2).GetSquare());
     }
 
 public:
@@ -465,7 +461,7 @@ public:
         rtcReleaseDevice(Device);
     }
 
-    std::vector<std::map<int, float> > Execute(const uint maxDepth) {
+    std::vector<std::vector<std::pair<int, float> > > Execute(const uint maxDepth) {
 //        std::vector<Quad> result;
 //        for (int i = 0; i < Quads.GetSize(); ++i) {
 //            bigQuads.push_back(Quads.GetQuad(i));
@@ -492,7 +488,7 @@ public:
     }
 };
 
-std::vector<std::map<int, float> > ComputeFormFactorsEmbree(
+std::vector<std::vector<std::pair<int, float> > > ComputeFormFactorsEmbree(
     QuadsContainer& quads,
     const std::vector<std::vector<glm::vec4> >& points,
     const std::vector<std::vector<uint> >& indices,

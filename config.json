@@ -6,9 +6,9 @@
   "DataDir": "Scenes/house_scenelib",
   "LoD": 3,
   "ScenePropertiesFile": "Scenes/house_scenelib/statex_00001.xml",
-  "RecomputeFormFactors": 1,
+  "RecomputeFormFactors": 0,
   "MaxPatchesCount": 110000,
   "MaxHierarchyDepth": 1,
-  "FormFactorsDir": "Multibounce flat FF",
+  "FormFactorsDir": "FF",
   "Bounces": 5
 }

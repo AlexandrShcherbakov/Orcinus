@@ -51,7 +51,7 @@ class RadiosityProgram : public Hors::Program {
     std::vector<HydraGeomData> SceneMeshes;
     std::vector<Quad> quads = {};
     std::unique_ptr<Hors::SceneProperties> sceneProperties = nullptr;
-    std::vector<std::map<int, float> > hierarchicalFF;
+    std::vector<std::vector<pair<int, float> > > hierarchicalFF;
     QuadsContainer quadsHierarchy;
 
     Hors::GLBuffer quadPointsBuffer, quadColorsBuffer, quadUVBuffer;
@@ -72,41 +72,42 @@ class RadiosityProgram : public Hors::Program {
         std::stringstream ss;
         ss << Get("DataDir") << "/" << Get("FormFactorsDir") << "/" << Get<int>("MaxHierarchyDepth") << ".bin";
         uint size;
+        std::cout << ss.str() << endl;
         ifstream in(ss.str(), ios::in | ios::binary);
         if (Get<bool>("RecomputeFormFactors") || !in.good()) {
             const auto globQuads = ExtractQuadsFromScene(SceneMeshes);
             cout << "Start to compute form-factors for " << globQuads.size() << " quads" << endl;
-//            auto timestamp = time(nullptr);
+            auto timestamp = time(nullptr);
             for (const auto& quad: globQuads) {
                 quadsHierarchy.AddQuad(quad);
             }
-//            hierarchicalFF = FormFactorComputationEmbree(quadsHierarchy);
-//            std::cout << quadsHierarchy.GetSize() << ' ' << hierarchicalFF.size() << endl;
-//            cout << "Form-factors hierarchy computation: " << time(nullptr) - timestamp << " seconds" << endl;
-//            ofstream out(ss.str(), ios::out | ios::binary);
-//            size = static_cast<uint>(quadsHierarchy.GetSize());
-//            out.write(reinterpret_cast<char*>(&size), sizeof(size));
-//            for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
-//                const auto quad = quadsHierarchy.GetQuad(i);
-//                for (const auto& v: quad.GetVertices()) {
-//                    const auto point = v.GetPoint();
-//                    const auto normal = v.GetNormal();
-//                    const auto texCoord = v.GetTextureCoordinates();
-//                    const auto matId = v.GetMaterialNumber();
-//                    out.write(reinterpret_cast<const char*>(&point), sizeof(point));
-//                    out.write(reinterpret_cast<const char*>(&normal), sizeof(normal));
-//                    out.write(reinterpret_cast<const char*>(&texCoord), sizeof(texCoord));
-//                    out.write(reinterpret_cast<const char*>(&matId), sizeof(matId));
-//                }
-//                const uint rowSize = hierarchicalFF[i].size();
-//                out.write(reinterpret_cast<const char*>(&rowSize), sizeof(rowSize));
-//                for (auto& item: hierarchicalFF[i]) {
-//                    out.write(reinterpret_cast<const char*>(&item.first), sizeof(item.first));
-//                    out.write(reinterpret_cast<char*>(&item.second), sizeof(item.second));
-//                }
-//            }
-//            in.close();
-//            out.close();
+            hierarchicalFF = FormFactorComputationEmbree(quadsHierarchy);
+            std::cout << quadsHierarchy.GetSize() << ' ' << hierarchicalFF.size() << endl;
+            cout << "Form-factors hierarchy computation: " << time(nullptr) - timestamp << " seconds" << endl;
+            ofstream out(ss.str(), ios::out | ios::binary);
+            size = static_cast<uint>(quadsHierarchy.GetSize());
+            out.write(reinterpret_cast<char*>(&size), sizeof(size));
+            for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
+                const auto quad = quadsHierarchy.GetQuad(i);
+                for (const auto& v: quad.GetVertices()) {
+                    const auto point = v.GetPoint();
+                    const auto normal = v.GetNormal();
+                    const auto texCoord = v.GetTextureCoordinates();
+                    const auto matId = v.GetMaterialNumber();
+                    out.write(reinterpret_cast<const char*>(&point), sizeof(point));
+                    out.write(reinterpret_cast<const char*>(&normal), sizeof(normal));
+                    out.write(reinterpret_cast<const char*>(&texCoord), sizeof(texCoord));
+                    out.write(reinterpret_cast<const char*>(&matId), sizeof(matId));
+                }
+                const uint rowSize = hierarchicalFF[i].size();
+                out.write(reinterpret_cast<const char*>(&rowSize), sizeof(rowSize));
+                for (auto& item: hierarchicalFF[i]) {
+                    out.write(reinterpret_cast<const char*>(&item.first), sizeof(item.first));
+                    out.write(reinterpret_cast<char*>(&item.second), sizeof(item.second));
+                }
+            }
+            in.close();
+            out.close();
             return;
         }
         in.read(reinterpret_cast<char*>(&size), sizeof(size));
@@ -268,7 +269,7 @@ class RadiosityProgram : public Hors::Program {
         return allBounces;
     }
 
-    std::vector<std::map<int, float> > FormFactorComputationEmbree(QuadsContainer& quadsHierarchy) {
+    std::vector<std::vector<pair<int, float> > > FormFactorComputationEmbree(QuadsContainer& quadsHierarchy) {
         std::vector<std::vector<glm::vec4> > points;
         std::vector<std::vector<uint> > indices;
         for (auto &SceneMesh : SceneMeshes) {
@@ -304,9 +305,10 @@ class RadiosityProgram : public Hors::Program {
         for (uint i = 0; i < coloredFF.size(); ++i) {
             coloredFF[i].assign(hierarchicalFF.size(), glm::vec3(0));
             for (uint j = 0; j < coloredFF[i].size(); ++j) {
-                if (hierarchicalFF[i].count(j)) {
-                    coloredFF[i][j] = hierarchicalFF[j][i] * glm::vec3(materialColors[quadsHierarchy.GetQuad(j).GetMaterialId()]);
-                }
+                //FF type was changed
+//                if (hierarchicalFF[i].count(j)) {
+//                    coloredFF[i][j] = hierarchicalFF[j][i] * glm::vec3(materialColors[quadsHierarchy.GetQuad(j).GetMaterialId()]);
+//                }
             }
         }
         multibounceMatrix.assign(hierarchicalFF.size(), std::vector<glm::vec3>(hierarchicalFF.size(), glm::vec3(0)));
@@ -329,10 +331,12 @@ class RadiosityProgram : public Hors::Program {
         for (uint i = 1; i < hierarchicalFF.size(); ++i) {
             std::vector<glm::vec3> fColumn(multibounceMatrix.size());
             std::vector<glm::vec3> fRow(multibounceMatrix.size());
-            for (uint j = 0; j < fColumn.size(); ++j) {
-                fColumn[j] = glm::vec3(hierarchicalFF[j][i]);
-                fRow[j] = glm::vec3(hierarchicalFF[i][j]);
-            }
+
+            //hierarchicalFF type was changed.
+//            for (uint j = 0; j < fColumn.size(); ++j) {
+//                fColumn[j] = glm::vec3(hierarchicalFF[j][i]);
+//                fRow[j] = glm::vec3(hierarchicalFF[i][j]);
+//            }
             std::vector<glm::vec3> gColumn(fColumn), gRow(fRow);
             glm::vec3 doubleReflection(0);
             for (uint j = 0; j < fColumn.size(); ++j) {
