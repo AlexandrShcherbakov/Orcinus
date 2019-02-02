@@ -341,7 +341,7 @@ class EmbreeHierarchicalFFJob {
     RTCDevice Device;
     RTCScene Scene;
     QuadsContainer& Quads;
-    std::vector<std::vector<std::pair<int, float> > > FF;
+    std::vector<std::map<int, float> > FF;
     RTCIntersectContext IntersectionContext;
     const float EPS = 1e-7;
     std::map<std::pair<int, int>, float> cache;
@@ -424,8 +424,8 @@ class EmbreeHierarchicalFFJob {
         if (ff < 1e-8f) {
             return;
         }
-        FF[idx1].emplace_back(idx2, ff / Quads.GetQuad(idx1).GetSquare());
-        FF[idx2].emplace_back(idx1, ff / Quads.GetQuad(idx2).GetSquare());
+        FF[idx1][idx2] = ff / Quads.GetQuad(idx1).GetSquare();
+        FF[idx2][idx1] = ff / Quads.GetQuad(idx2).GetSquare();
     }
 
 public:
@@ -461,7 +461,7 @@ public:
         rtcReleaseDevice(Device);
     }
 
-    std::vector<std::vector<std::pair<int, float> > > Execute(const uint maxDepth) {
+    std::vector<std::map<int, float>> Execute(const uint maxDepth) {
 //        std::vector<Quad> result;
 //        for (int i = 0; i < Quads.GetSize(); ++i) {
 //            bigQuads.push_back(Quads.GetQuad(i));
@@ -488,7 +488,7 @@ public:
     }
 };
 
-std::vector<std::vector<std::pair<int, float> > > ComputeFormFactorsEmbree(
+std::vector<std::map<int, float>> ComputeFormFactorsEmbree(
     QuadsContainer& quads,
     const std::vector<std::vector<glm::vec4> >& points,
     const std::vector<std::vector<uint> >& indices,

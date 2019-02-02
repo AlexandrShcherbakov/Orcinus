@@ -1,7 +1,7 @@
 {
   "GLVersion": "4.0",
   "Title": "Radiosity",
-  "WindowSize": "1024x1024",
+  "WindowSize": "1600x900",
   "InputFile": "Scenes/house_scenelib/scene.vsgf",
   "DataDir": "Scenes/house_scenelib",
   "LoD": 3,
@@ -10,5 +10,6 @@
   "MaxPatchesCount": 110000,
   "MaxHierarchyDepth": 1,
   "FormFactorsDir": "FF",
-  "Bounces": 5
+  "Bounces": 5,
+  "MatrixSize": 512
 }

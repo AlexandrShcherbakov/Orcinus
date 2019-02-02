@@ -12,7 +12,7 @@ vec4 saturate(vec4 v) {
 
 void main() {
 	outColor = quadColor;//pow(saturate(quadColor), vec4(1 / 2.2));
-	outColor = texture(Tex, vert_uv);
+	outColor = texture(Tex, vert_uv) * (vec4(quadColor.xyz, 1) + 0.1);
 	if (outColor.a < 0.5) {
 	    discard;
 	}
