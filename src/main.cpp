@@ -74,8 +74,11 @@ class RadiosityProgram : public Hors::Program {
     std::vector<std::vector<glm::vec3>> dynamicMatrix;
     std::vector<int> quadsInMatrix;
     std::vector<std::vector<bool>> usedQuads;
+    std::vector<std::vector<std::vector<glm::vec4>>> texData;
 
-    std::vector<glm::vec3> inMatrixColor;
+    std::vector<glm::vec4> quadsColors;
+
+    vector<glm::vec4> lighting;
 
     void LoadFormFactorsHierarchy() {
         std::stringstream ss;
@@ -201,7 +204,7 @@ class RadiosityProgram : public Hors::Program {
 //            cout << "Compute indirect lighting 100 times: " << bounces << ' ' << hierarchyDepth << ' ' << result << endl;
 //        }
 
-        const auto indirect = computeDynamicIndirectLighting();
+        computeDynamicIndirectLighting();
 
         std::vector<std::vector<uint> > indexBuffers;
         indexBuffers.resize(materialColors.size());
@@ -214,15 +217,11 @@ class RadiosityProgram : public Hors::Program {
             indexBuffers[matId].emplace_back(static_cast<unsigned int &&>(perQuadPositions.size()));
             indexBuffers[matId].emplace_back(static_cast<unsigned int &&>(perQuadPositions.size() + 2));
             indexBuffers[matId].emplace_back(static_cast<unsigned int &&>(perQuadPositions.size() + 3));
-//            glm::vec4 randVec = firstBounce[i];
             for (const auto& point: quadsHierarchy.GetQuad(i).GetVertices()) {
                 perQuadPositions.emplace_back(point.GetPoint());
                 quadsNormals.emplace_back(point.GetNormal());
-//                perQuadColors.emplace_back(point.GetNormal() * 0.5f + 0.5f);
-                perQuadColors.emplace_back(indirect[i]);
-//                perQuadColors.emplace_back(materialsEmission[quadsHierarchy.GetQuad(i).GetMaterialId()]);
+                perQuadColors.emplace_back(lighting[i]);
                 texCoords.emplace_back(point.GetTextureCoordinates());
-//                perQuadColors.push_back(randVec);
             }
             renderedQuads.emplace_back(static_cast<unsigned int &&>(i));
         }
@@ -261,43 +260,39 @@ class RadiosityProgram : public Hors::Program {
         glEnable(GL_DEPTH_TEST); CHECK_GL_ERRORS;
     }
 
-    vector<glm::vec4> computeIndirectLighting(const uint bouncesCount) {
-        vector<glm::vec4> allBounces(multibounceMatrix.size(), glm::vec4(0));
-        for (uint i = 0; i < multibounceMatrix.size(); ++i) {
-            const auto targetId = quadsHierarchy.GetQuad(i).GetMaterialId();
-            for (uint j = 0; j < multibounceMatrix[i].size(); ++j) {
-                const auto materialId = quadsHierarchy.GetQuad(j).GetMaterialId();
-                allBounces[i] += materialsEmission[materialId] * glm::make_vec4(multibounceMatrix[i][j]);
-            }
-            allBounces[i] *= materialColors[targetId];
-            allBounces[i] += materialsEmission[targetId];
+    void computeIndirectLighting(const uint bouncesCount) {
+        LabeledTimer timer("Full radiosity");
+        vector<glm::vec4> prevBounce(hierarchicalFF.size(), glm::vec4(0));
+        vector<glm::vec4> bounce(hierarchicalFF.size(), glm::vec4(0));
+        for (uint i = 0; i < hierarchicalFF.size(); ++i) {
+            lighting[i] = materialsEmission[quadsHierarchy.GetQuad(i).GetMaterialId()];
+            prevBounce[i] = lighting[i];
         }
-        return allBounces;
+        for (uint k = 0; k < bouncesCount; ++k) {
+            for (uint i = 0; i < hierarchicalFF.size(); ++i) {
+                for (const auto& it : hierarchicalFF[i]) {
+                    bounce[i] += prevBounce[it.first] * it.second;
+                }
+            }
+            for (uint i = 0; i < hierarchicalFF.size(); ++i) {
+                lighting[i] += bounce[i];
+                prevBounce[i] = bounce[i] * quadsColors[i];
+                bounce[i] = glm::vec4(0);
+            }
+        }
     }
 
-    vector<glm::vec4> computeDynamicIndirectLighting() {
-        vector<glm::vec4> allBounces(quadsHierarchy.GetSize(), glm::vec4(0));
-//        for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
-//            if (quadsHierarchy.GetQuad(i).GetMaterialId() != 27) {
-//                continue;
-//            }
-//            for (pair<const int, float> & it : hierarchicalFF[i]) {
-//                allBounces[it.first] += it.second * 100;
-////                cout << it.second << endl;
-//            }
-//        }
-//        return allBounces;
+    void computeDynamicIndirectLighting() {
         for (uint i = 0; i < dynamicMatrix.size(); ++i) {
-//            allBounces[quadsInMatrix[i]] = glm::vec4(1);
+            lighting[quadsInMatrix[i]] = glm::vec4(0);
             const auto targetId = quadsHierarchy.GetQuad(quadsInMatrix[i]).GetMaterialId();
             for (uint j = 0; j < dynamicMatrix[i].size(); ++j) {
                 const auto materialId = quadsHierarchy.GetQuad(quadsInMatrix[j]).GetMaterialId();
-                allBounces[quadsInMatrix[i]] += materialsEmission[materialId] * glm::make_vec4(dynamicMatrix[i][j]);
+                lighting[quadsInMatrix[i]] += materialsEmission[materialId] * glm::make_vec4(dynamicMatrix[i][j]);
             }
-            allBounces[quadsInMatrix[i]] *= materialColors[targetId];
-            allBounces[quadsInMatrix[i]] += materialsEmission[targetId];
+            lighting[quadsInMatrix[i]] *= materialColors[targetId];
+            lighting[quadsInMatrix[i]] += materialsEmission[targetId];
         }
-        return allBounces;
     }
 
     std::vector<std::map<int, float>> FormFactorComputationEmbree(QuadsContainer& quadsHierarchy) {
@@ -413,11 +408,15 @@ class RadiosityProgram : public Hors::Program {
         ifstream in(Get("DataDir") + "/" + record.location, ios::in | ios::binary);
         assert(in.is_open());
         in.seekg(record.offset);
-        std::vector<char> data(record.bytesize);
+        texData.resize(texData.size() + 1);
+        texData.back().resize(record.height);
+        std::vector<unsigned char> data(record.bytesize);
         for (uint i = 0; i < record.height; ++i) {
+            texData.back()[i].resize(record.width);
             for (uint j = 0; j < record.width; ++j) {
                 for (uint k = 0; k < 4; ++k) {
-                    in.read(&data[(i * record.width + j) * 4 + k], sizeof(char));
+                    in.read(reinterpret_cast<char *>(&data[(i * record.width + j) * 4 + k]), sizeof(char));
+                    texData.back()[i][j][k] = data[(i * record.width + j) * 4 + k] / 255.f;
                 }
             }
         }
@@ -439,11 +438,7 @@ class RadiosityProgram : public Hors::Program {
 
     void InitDynamicMatrix() {
         dynamicMatrix.assign(1, std::vector<glm::vec3>(1, glm::vec3(1)));
-        std::vector<glm::vec3> colors(Get<int>("MatrixSize"));
-        for (uint i = 0; i < colors.size(); ++i) {
-            colors[i] = glm::vec3(materialColors[quadsHierarchy.GetQuad(quadsInMatrix[i]).GetMaterialId()]);
-        }
-        for (uint i = 1; i < colors.size(); ++i) {
+        for (int i = 1; i < Get<int>("MatrixSize"); ++i) {
             std::vector<glm::vec3> fColumn(dynamicMatrix.size());
             std::vector<glm::vec3> fRow(dynamicMatrix.size());
 
@@ -454,29 +449,25 @@ class RadiosityProgram : public Hors::Program {
             std::vector<glm::vec3> gColumn(fColumn), gRow(fRow);
             glm::vec3 doubleReflection(0);
             for (uint j = 0; j < fColumn.size(); ++j) {
-                doubleReflection += fRow[j] * fColumn[j] * colors[j];
+                doubleReflection += fRow[j] * fColumn[j] * glm::vec3(quadsColors[quadsInMatrix[j]]);
             }
             for (uint j = 0; j < fColumn.size(); ++j) {
-                gColumn[j] += fColumn[j] * colors[i] * doubleReflection;
-                gRow[j] += fRow[j] * colors[i] * doubleReflection;
+                gColumn[j] += fColumn[j] * glm::vec3(quadsColors[quadsInMatrix[i]]) * doubleReflection;
+                gRow[j] += fRow[j] * glm::vec3(quadsColors[quadsInMatrix[i]]) * doubleReflection;
             }
-            std::vector<glm::vec3> interReflection(fColumn.size(), glm::vec3(0));
             for (uint j = 0; j < fColumn.size(); ++j) {
                 for (uint k = 0; k < fColumn.size(); ++k) {
-                    interReflection[j] += dynamicMatrix[j][k] * fColumn[k] * colors[k];
+                    gColumn[j] += dynamicMatrix[j][k] * fColumn[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
                 }
-                gColumn[j] += interReflection[j];
             }
-            interReflection.assign(fColumn.size(), glm::vec3(0));
             for (uint j = 0; j < fColumn.size(); ++j) {
                 for (uint k = 0; k < fColumn.size(); ++k) {
-                    interReflection[j] += dynamicMatrix[k][j] * fRow[k] * colors[k];
+                    gRow[j] += dynamicMatrix[k][j] * fRow[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
                 }
-                gRow[j] += interReflection[j];
             }
             for (uint j = 0; j < fColumn.size(); ++j) {
                 for (uint k = 0; k < fRow.size(); ++k) {
-                    dynamicMatrix[j][k] += gColumn[j] * gRow[k] * colors[i];
+                    dynamicMatrix[j][k] += gColumn[j] * gRow[k] * glm::vec3(quadsColors[quadsInMatrix[i]]);
                 }
             }
             for (uint j = 0; j < fColumn.size(); ++j) {
@@ -486,7 +477,7 @@ class RadiosityProgram : public Hors::Program {
             dynamicMatrix.back().push_back(glm::vec3(1));
             for (uint j = 0; j < gColumn.size(); ++j) {
                 for (uint k = 0; k < gColumn.size(); ++k) {
-                    dynamicMatrix.back().back() += gColumn[j] * gRow[k] * colors[k];
+                    dynamicMatrix.back().back() += gColumn[j] * gRow[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
                 }
             }
         }
@@ -530,7 +521,6 @@ class RadiosityProgram : public Hors::Program {
 
     void AddToMatrix(const int idx, const uint place) {
         LabeledTimer timer("AddToMatrix");
-        inMatrixColor[place] = glm::vec3(materialColors[quadsHierarchy.GetQuad(idx).GetMaterialId()]);
         std::vector<glm::vec3> fColumn(dynamicMatrix.size(), glm::vec3(0));
         std::vector<glm::vec3> fRow(dynamicMatrix.size(), glm::vec3(0));
 
@@ -545,25 +535,23 @@ class RadiosityProgram : public Hors::Program {
         std::vector<glm::vec3> gColumn(fColumn), gRow(fRow);
         glm::vec3 doubleReflection(0);
         for (uint j = 0; j < fColumn.size(); ++j) {
-            doubleReflection += fRow[j] * fColumn[j] * inMatrixColor[j];
+            doubleReflection += fRow[j] * fColumn[j] * glm::vec3(quadsColors[quadsInMatrix[j]]);
         }
+        doubleReflection *= glm::vec3(quadsColors[quadsInMatrix[place]]);
         for (uint j = 0; j < fColumn.size(); ++j) {
-            gColumn[j] += fColumn[j] * inMatrixColor[place] * doubleReflection;
-            gRow[j] += fRow[j] * inMatrixColor[place] * doubleReflection;
+            gColumn[j] += fColumn[j] * doubleReflection;
+            gRow[j] += fRow[j] * doubleReflection;
         }
-//#pragma omp parallel for
-        for (uint j = 0; j < fColumn.size(); ++j) {
-            for (uint k = 0; k < fColumn.size(); ++k) {
-                gColumn[j] += dynamicMatrix[j][k] * fColumn[k] * inMatrixColor[k];
-            }
-        }
-//#pragma omp parallel for
         for (uint j = 0; j < fColumn.size(); ++j) {
             for (uint k = 0; k < fColumn.size(); ++k) {
-                gRow[j] += dynamicMatrix[k][j] * fRow[k] * inMatrixColor[k];
+                gColumn[j] += dynamicMatrix[j][k] * fColumn[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
             }
         }
-//#pragma omp parallel for
+        for (uint j = 0; j < fColumn.size(); ++j) {
+            for (uint k = 0; k < fColumn.size(); ++k) {
+                gRow[j] += dynamicMatrix[k][j] * fRow[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
+            }
+        }
         for (uint j = 0; j < fColumn.size(); ++j) {
             if (j == place || usedQuads[quadsInMatrix[j]][idx]) {
                 continue;
@@ -572,7 +560,7 @@ class RadiosityProgram : public Hors::Program {
                 if (k == place || usedQuads[idx][quadsInMatrix[j]]) {
                     continue;
                 }
-                dynamicMatrix[j][k] += gColumn[j] * gRow[k] * inMatrixColor[place];
+                dynamicMatrix[j][k] += gColumn[j] * gRow[k] * glm::vec3(quadsColors[quadsInMatrix[place]]);
             }
         }
         for (uint j = 0; j < fColumn.size(); ++j) {
@@ -580,7 +568,6 @@ class RadiosityProgram : public Hors::Program {
             dynamicMatrix[place][j] = gRow[j];
         }
         dynamicMatrix[place][place] = glm::vec3(0);
-//#pragma omp parallel for
         for (uint j = 0; j < gColumn.size(); ++j) {
             if (j == place || usedQuads[quadsInMatrix[j]][idx]) {
                 continue;
@@ -589,18 +576,18 @@ class RadiosityProgram : public Hors::Program {
                 if (k == place || usedQuads[idx][quadsInMatrix[j]]) {
                     continue;
                 }
-                dynamicMatrix[place][place] += gColumn[j] * gRow[k] * inMatrixColor[k];
+                dynamicMatrix[place][place] += gColumn[j] * gRow[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
             }
         }
     }
 
     void UpdateLightBuffer() {
         LabeledTimer timer("UpdateLightBuffer");
-        const auto indirect = computeDynamicIndirectLighting();
+        computeDynamicIndirectLighting();
         perQuadColors.clear();
         for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
             for (uint j = 0; j < quadsHierarchy.GetQuad(i).GetVertices().size(); ++j) {
-                perQuadColors.emplace_back(indirect[i]);
+                perQuadColors.emplace_back(lighting[i]);
             }
         }
 
@@ -640,6 +627,41 @@ class RadiosityProgram : public Hors::Program {
         RemoveFromMatrix(includedDist.first);
         AddToMatrix(excludedDist.first, includedDist.first);
         UpdateMatrixInfo(excludedDist.first, includedDist.first);
+    }
+
+    void ComputeQuadColors() {
+        for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
+            const int materialId = quadsHierarchy.GetQuad(i).GetMaterialId();
+            quadsColors.emplace_back(materialColors[materialId]);
+            int textureId = textureIds[materialId];
+            if (textureId == -1) {
+                continue;
+            }
+            float topUV = 1e6f;
+            float bottomUV = -1e6f;
+            float leftUV = 1e6f;
+            float rightUV = -1e6f;
+            for (const auto& vert : quadsHierarchy.GetQuad(i).GetVertices()) {
+                topUV = std::min(topUV, vert.GetTextureCoordinates().y);
+                bottomUV = std::max(bottomUV, vert.GetTextureCoordinates().y);
+                leftUV = std::min(leftUV, vert.GetTextureCoordinates().x);
+                rightUV = std::max(rightUV, vert.GetTextureCoordinates().x);
+            }
+            const int top = static_cast<int>(topUV * texData[textureId].size()) % (texData[textureId].size() + 1);
+            const int bottom = static_cast<int>(bottomUV * texData[textureId].size()) % (texData[textureId].size() + 1);
+            const int left = static_cast<int>(leftUV * texData[textureId][0].size()) % (texData[textureId][0].size() + 1);
+            const int right = static_cast<int>(rightUV * texData[textureId][0].size()) % (texData[textureId][0].size() + 1);
+            assert(top < bottom);
+            assert(left < right);
+            glm::vec4 texColor(0);
+            for (int j = top; j < bottom; ++j) {
+                for (int k = left; k < right; ++k) {
+                    texColor += texData[textureId][j][k];
+                }
+            }
+            texColor /= (bottom - top) * (right - left);
+            quadsColors.back() *= texColor;
+        }
     }
 
 
@@ -697,6 +719,11 @@ public:
             }
         }
 
+        ComputeQuadColors();
+
+        lighting.assign(static_cast<unsigned long>(quadsHierarchy.GetSize()), glm::vec4(0));
+        computeIndirectLighting(10);
+
         quadsInMatrix.resize(static_cast<unsigned long>(quadsHierarchy.GetSize()));
         for (uint i = 0; i < quadsInMatrix.size(); ++i) {
             quadsInMatrix[i] = i;
@@ -717,11 +744,6 @@ public:
             for (int j : quadsInMatrix) {
                 usedQuads[i][j] = true;
             }
-        }
-
-        inMatrixColor.resize(Get<int>("MatrixSize"));
-        for (uint i = 0; i < inMatrixColor.size(); ++i) {
-            inMatrixColor[i] = glm::vec3(materialColors[quadsHierarchy.GetQuad(quadsInMatrix[i]).GetMaterialId()]);
         }
 
         cout << "Dynamic matrix prepared" << endl;
