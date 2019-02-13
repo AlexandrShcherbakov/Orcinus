@@ -262,9 +262,9 @@ class RadiosityProgram : public Hors::Program {
 
     void computeIndirectLighting(const uint bouncesCount) {
         LabeledTimer timer("Full radiosity");
-        vector<glm::vec4> prevBounce(hierarchicalFF.size(), glm::vec4(0));
-        vector<glm::vec4> bounce(hierarchicalFF.size(), glm::vec4(0));
-        for (uint i = 0; i < hierarchicalFF.size(); ++i) {
+        vector<glm::vec4> prevBounce(quadsHierarchy.GetSize(), glm::vec4(0));
+        vector<glm::vec4> bounce(quadsHierarchy.GetSize(), glm::vec4(0));
+        for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
             lighting[i] = materialsEmission[quadsHierarchy.GetQuad(i).GetMaterialId()];
             prevBounce[i] = lighting[i];
         }
@@ -425,6 +425,7 @@ class RadiosityProgram : public Hors::Program {
         glActiveTexture(GL_TEXTURE0 + record.id);
         glBindTexture(GL_TEXTURE_2D, texId);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, record.width, record.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data.data()); CHECK_GL_ERRORS;
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); CHECK_GL_ERRORS;
         glGenerateMipmap(GL_TEXTURE_2D); CHECK_GL_ERRORS;
         return texId;
     }
@@ -516,7 +517,11 @@ class RadiosityProgram : public Hors::Program {
     }
 
     void RemoveFromMatrix(const int idx) {
-
+        LabeledTimer timer("RemoveFromMatrix");
+        for (uint i = 0; i < dynamicMatrix.size(); ++i) {
+            dynamicMatrix[idx][i] = glm::vec3(0);
+            dynamicMatrix[i][idx] = glm::vec3(0);
+        }
     }
 
     void AddToMatrix(const int idx, const uint place) {
@@ -656,7 +661,7 @@ class RadiosityProgram : public Hors::Program {
             glm::vec4 texColor(0);
             for (int j = top; j < bottom; ++j) {
                 for (int k = left; k < right; ++k) {
-                    texColor += texData[textureId][j][k];
+                    texColor += glm::pow(texData[textureId][j][k], glm::vec4(2.2f));
                 }
             }
             texColor /= (bottom - top) * (right - left);
@@ -682,16 +687,16 @@ public:
         sceneProperties = std::make_unique<Hors::SceneProperties>(Get("ScenePropertiesFile"));
         CreateTextures();
         textureIds = sceneProperties->GetDiffuseTextures();
-        SceneMeshes.resize(sceneProperties->GetChunksPaths().size());
         auto matrices = sceneProperties->GetMeshMatrices();
+        SceneMeshes.resize(matrices.size());
         for (uint i = 0; i < SceneMeshes.size(); ++i) {
-            SceneMeshes[i].read(Get("DataDir") + "/" + sceneProperties->GetChunksPaths()[i]);
+            SceneMeshes[i].read(Get("DataDir") + "/" + sceneProperties->GetChunksPaths()[matrices[i].second]);
             std::vector<glm::vec4> points(SceneMeshes[i].getVerticesNumber());
             for (uint k = 0; k < points.size(); ++k) {
                 points[k] = glm::make_vec4(SceneMeshes[i].getVertexPositionsFloat4Array() + k * 4);
             }
             for (auto & point: points) {
-                point = point * matrices[i];
+                point = point * matrices[i].first;
             }
             memcpy(const_cast<float*>(SceneMeshes[i].getVertexPositionsFloat4Array()), points.data(), points.size() * sizeof(points[0]));
             std::vector<glm::vec4> normals(SceneMeshes[i].getVerticesNumber());
@@ -699,7 +704,7 @@ public:
                 normals[k] = glm::make_vec4(SceneMeshes[i].getVertexNormalsFloat4Array() + k * 4);
             }
             for (auto & normal: normals) {
-                normal = normal * matrices[i];
+                normal = normal * matrices[i].first;
             }
             memcpy(const_cast<float*>(SceneMeshes[i].getVertexNormalsFloat4Array()), normals.data(), normals.size() * sizeof(normals[0]));
         }
@@ -707,6 +712,9 @@ public:
         LoadFormFactorsHierarchy();
 
         materialsEmission = sceneProperties->GetEmissionColors();
+        for (auto &v: materialsEmission) {
+            v *= 10.f;
+        }
         materialColors = sceneProperties->GetDiffuseColors();
         const auto cameras = sceneProperties->GetCameras(Get<Hors::WindowSize>("WindowSize").GetScreenRadio());
         assert(!cameras.empty());
@@ -773,10 +781,7 @@ public:
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); CHECK_GL_ERRORS;
         glPolygonMode(GL_FRONT_AND_BACK, renderLines ? GL_LINE : GL_FILL);
         for (uint i = 0; i < perMaterialIndices.size(); ++i) {
-            if (textureIds[i] == -1) {
-                continue;
-            }
-            Hors::SetUniform(QuadRender, "Tex", textureIds[i]);
+            Hors::SetUniform(QuadRender, "Tex", textureIds[i] != -1 ? textureIds[i] : 0);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *perMaterialIndices[i]); CHECK_GL_ERRORS;
             glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(perMaterialQuads[i]), GL_UNSIGNED_INT, nullptr); CHECK_GL_ERRORS;
         }

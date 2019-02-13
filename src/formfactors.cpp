@@ -348,6 +348,13 @@ class EmbreeHierarchicalFFJob {
     std::vector<Quad> bigQuads;
 
     float GetTwoQuadsFF(const int idx1, const int idx2) {
+        const glm::vec4 normal1 = Quads.GetQuad(idx1).GetNormal();
+        const glm::vec4 normal2 = Quads.GetQuad(idx2).GetNormal();
+        const glm::vec4 RR = glm::normalize(Quads.GetQuad(idx1).GetSample(glm::vec2(0.5)) - Quads.GetQuad(idx2).GetSample(glm::vec2(0.5)));
+        if (glm::dot(-1.f * RR, normal1) < -1e-3 || glm::dot(RR, normal2) < -1e-3) {
+            return 0;
+        }
+
         const uint PACKET_SIZE = 16;
         const auto samples = GenerateRandomSamples(PACKET_SIZE * 2);
 
@@ -401,11 +408,10 @@ class EmbreeHierarchicalFFJob {
 //                    continue;
 //                }
                 const float rayLength = glm::length(rays[k + l].second);
-                const float cosTheta1 = std::max(glm::dot(Quads.GetQuad(idx1).GetNormal(), glm::normalize(rays[k + l].second)), 0.0f);
-                const float cosTheta2 = std::max(glm::dot(Quads.GetQuad(idx2).GetNormal(), -glm::normalize(rays[k + l].second)), 0.0f);
+                const float cosTheta1 = std::max(glm::dot(normal1, glm::normalize(rays[k + l].second)), 0.0f);
+                const float cosTheta2 = std::max(glm::dot(normal2, -glm::normalize(rays[k + l].second)), 0.0f);
                 const float sampleValue = cosTheta1 * cosTheta2 / sqr(rayLength);
                 if (sampleValue < 0.5 * sqr(samples.size()) * static_cast<float>(M_PI)) {
-//                    visibilityCount++;
                     samplesSum += sampleValue;
                 } else {
                     visibilityCount--;
