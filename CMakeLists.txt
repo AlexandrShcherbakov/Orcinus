@@ -4,7 +4,7 @@ project(Orcinus)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -pedantic -fopenmp")
 
-set(CMAKE_PREFIX_PATH "/usr/lib64")
+set(CMAKE_PREFIX_PATH "/usr/lib64/cmake")
 
 message("${CMAKE_MODULE_PATH}")
 
@@ -30,6 +30,8 @@ add_executable(Orcinus
         src/tesselation.cpp
         src/RadiosityComputation.cpp
         include/RadiosityComputation.h)
+
+set(OpenGL_GL_PREFERENCE GLVND)
 
 find_package(GLUT REQUIRED)
 include_directories(${GLUT_INCLUDE_DIRS})

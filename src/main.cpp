@@ -221,6 +221,7 @@ class RadiosityProgram : public Hors::Program {
                 perQuadPositions.emplace_back(point.GetPoint());
                 quadsNormals.emplace_back(point.GetNormal());
                 perQuadColors.emplace_back(lighting[i]);
+//                perQuadColors.emplace_back(quadsHierarchy.GetQuad(i).GetNormal());
                 texCoords.emplace_back(point.GetTextureCoordinates());
             }
             renderedQuads.emplace_back(static_cast<unsigned int &&>(i));
@@ -713,7 +714,7 @@ public:
 
         materialsEmission = sceneProperties->GetEmissionColors();
         for (auto &v: materialsEmission) {
-            v *= 10.f;
+            v *= 10;
         }
         materialColors = sceneProperties->GetDiffuseColors();
         const auto cameras = sceneProperties->GetCameras(Get<Hors::WindowSize>("WindowSize").GetScreenRadio());
@@ -730,7 +731,7 @@ public:
         ComputeQuadColors();
 
         lighting.assign(static_cast<unsigned long>(quadsHierarchy.GetSize()), glm::vec4(0));
-        computeIndirectLighting(10);
+        computeIndirectLighting(3);
 
         quadsInMatrix.resize(static_cast<unsigned long>(quadsHierarchy.GetSize()));
         for (uint i = 0; i < quadsInMatrix.size(); ++i) {

@@ -396,25 +396,16 @@ class EmbreeHierarchicalFFJob {
 
         for (uint k = 0; k < rays.size(); k += PACKET_SIZE) {
             for (uint l = 0; l < PACKET_SIZE; ++l) {
-                visibilityCount++;
                 if (raysPackets[k / PACKET_SIZE].tfar[l] < 0.f) {
                     continue;
                 }
-//                bool flag = false;
-//                for (uint i = 0; i < bigQuads.size() && !flag; ++i) {
-//                    flag = bigQuads[i].CheckIntersectionWithVector(rays[k + l].first, rays[k + l].first + rays[k + l].second);
-//                }
-//                if (flag) {
-//                    continue;
-//                }
                 const float rayLength = glm::length(rays[k + l].second);
                 const float cosTheta1 = std::max(glm::dot(normal1, glm::normalize(rays[k + l].second)), 0.0f);
                 const float cosTheta2 = std::max(glm::dot(normal2, -glm::normalize(rays[k + l].second)), 0.0f);
                 const float sampleValue = cosTheta1 * cosTheta2 / sqr(rayLength);
                 if (sampleValue < 0.5 * sqr(samples.size()) * static_cast<float>(M_PI)) {
                     samplesSum += sampleValue;
-                } else {
-                    visibilityCount--;
+                    visibilityCount++;
                 }
             }
         }
@@ -427,11 +418,11 @@ class EmbreeHierarchicalFFJob {
 
     void ProcessTwoQuads(const int idx1, const int idx2) {
         const float ff = GetTwoQuadsFF(idx1, idx2);
-        if (ff < 1e-8f) {
+        if (ff < 1e-9f) {
             return;
         }
-        FF[idx1][idx2] = ff / Quads.GetQuad(idx1).GetSquare();
-        FF[idx2][idx1] = ff / Quads.GetQuad(idx2).GetSquare();
+        FF[idx1][idx2] = ff / Quads.GetQuad(idx2).GetSquare();
+        FF[idx2][idx1] = ff / Quads.GetQuad(idx1).GetSquare();
     }
 
 public:

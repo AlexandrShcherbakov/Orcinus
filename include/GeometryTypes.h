@@ -111,10 +111,18 @@ inline T sign(const T& t) {
 
 class Quad {
     std::array<ModelVertex, 4> Vertices;
+    glm::vec4 normal;
 
 public:
     Quad(const ModelVertex& a, const ModelVertex& b, const ModelVertex& c, const ModelVertex& d) {
         Vertices = {a, b, c, d};
+        if (Vertices[0].GetMaterialNumber() == 44) {
+            normal = glm::vec4(glm::cross(glm::vec3(Vertices[3].GetPoint() - Vertices[0].GetPoint()), glm::vec3(Vertices[1].GetPoint() - Vertices[0].GetPoint())), 0);
+        } else {
+            normal = glm::vec4(glm::cross(glm::vec3(Vertices[1].GetPoint() - Vertices[0].GetPoint()),
+                                          glm::vec3(Vertices[3].GetPoint() - Vertices[0].GetPoint())), 0);
+        }
+        normal = glm::normalize(normal);
     }
 
     std::array<ModelVertex, 4> GetVertices() const {
@@ -198,6 +206,11 @@ public:
     }
 
     glm::vec4 GetNormal() const {
+        return normal;
+        if (Vertices[0].GetMaterialNumber() == 44) {
+            return glm::vec4(glm::cross(glm::vec3(Vertices[3].GetPoint() - Vertices[0].GetPoint()), glm::vec3(Vertices[1].GetPoint() - Vertices[0].GetPoint())), 0);
+        }
+        return glm::vec4(glm::cross(glm::vec3(Vertices[1].GetPoint() - Vertices[0].GetPoint()), glm::vec3(Vertices[3].GetPoint() - Vertices[0].GetPoint())), 0);
         return Vertices[0].GetNormal();
     }
 
@@ -213,6 +226,7 @@ public:
         for (auto& vertex: Vertices) {
             vertex.SetNormal(normal);
         }
+        this->normal = normal;
     }
 
     uint GetMaterialId() const {
