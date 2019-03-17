@@ -18,17 +18,17 @@ std::vector<std::vector<float> > ComputeFormFactors(
     bool antiradiance=false
 );
 
-std::vector<std::map<uint, float> > ComputeFormFactorsEmbree(
+std::vector<std::map<unsigned, float> > ComputeFormFactorsEmbree(
     const std::vector<Quad>& quads,
     const std::vector<std::vector<glm::vec4> >& points,
-    const std::vector<std::vector<uint> >& indices
+    const std::vector<std::vector<unsigned> >& indices
 );
 
 std::vector<std::map<int, float>> ComputeFormFactorsEmbree(
     QuadsContainer& quads,
     const std::vector<std::vector<glm::vec4> >& points,
-    const std::vector<std::vector<uint> >& indices,
-    uint maxDepth
+    const std::vector<std::vector<unsigned> >& indices,
+    unsigned maxDepth
 );
 
 #endif //ORCINUS_FORMFACTORS_H

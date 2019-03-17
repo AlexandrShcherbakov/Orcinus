@@ -1,5 +1,5 @@
 {
-  "GLVersion": "4.0",
+  "GLVersion": "3.0",
   "Title": "Radiosity",
   "WindowSize": "1024x1024",
   "InputFile": "Scenes/house_v1/scenelib/scene.vsgf",

@@ -12,7 +12,7 @@
 #include <utility>
 
 std::vector<glm::vec4> RecomputeColorsForQuadsCPU(
-    const std::vector<std::map<uint, float> > & ff,
+    const std::vector<std::map<unsigned, float> > & ff,
     const std::vector<glm::vec4> & colors,
     const std::vector<glm::vec4> & emission,
     int iters = 1
@@ -25,7 +25,7 @@ void RemoveUnnecessaryQuads(
 
 std::vector<glm::vec4> RecomputeColorsForQuadsCPU(
     const QuadsContainer& quads,
-    const std::vector<std::map<uint, float> > & ff,
+    const std::vector<std::map<unsigned, float> > & ff,
     const std::vector<glm::vec4> & colors,
     const std::vector<glm::vec4> & emission,
     int iters = 1

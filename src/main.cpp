@@ -20,6 +20,7 @@
 #include "tesselation.h"
 #include "RadiosityComputation.h"
 
+//#define CHECK_GL_ERRORS
 using namespace std;
 
 inline bool vec4Less(const glm::vec4& a, const glm::vec4& b) {
@@ -58,10 +59,10 @@ class RadiosityProgram : public Hors::Program {
 
     Hors::GLBuffer quadPointsBuffer, quadColorsBuffer, quadUVBuffer;
     std::vector<Hors::GLBuffer> perMaterialIndices;
-    std::vector<uint> perMaterialQuads;
+    std::vector<unsigned> perMaterialQuads;
     GLuint QuadRender;
     std::vector<glm::vec4> perQuadPositions, perQuadColors;
-    std::vector<uint> renderedQuads;
+    std::vector<unsigned> renderedQuads;
     std::vector<glm::vec4> materialsEmission;
     std::vector<glm::vec4> materialColors;
     std::vector<std::vector<glm::vec3> > multibounceMatrix;
@@ -83,7 +84,7 @@ class RadiosityProgram : public Hors::Program {
     void LoadFormFactorsHierarchy() {
         std::stringstream ss;
         ss << Get("DataDir") << "/" << Get("FormFactorsDir") << "/" << Get<int>("MaxHierarchyDepth") << ".bin";
-        uint size;
+        unsigned size;
         std::cout << ss.str() << endl;
         ifstream in(ss.str(), ios::in | ios::binary);
         if (Get<bool>("RecomputeFormFactors") || !in.good()) {
@@ -97,7 +98,7 @@ class RadiosityProgram : public Hors::Program {
             std::cout << quadsHierarchy.GetSize() << ' ' << hierarchicalFF.size() << endl;
             cout << "Form-factors hierarchy computation: " << time(nullptr) - timestamp << " seconds" << endl;
             ofstream out(ss.str(), ios::out | ios::binary);
-            size = static_cast<uint>(quadsHierarchy.GetSize());
+            size = static_cast<unsigned>(quadsHierarchy.GetSize());
             out.write(reinterpret_cast<char*>(&size), sizeof(size));
             for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
                 const auto quad = quadsHierarchy.GetQuad(i);
@@ -111,7 +112,7 @@ class RadiosityProgram : public Hors::Program {
                     out.write(reinterpret_cast<const char*>(&texCoord), sizeof(texCoord));
                     out.write(reinterpret_cast<const char*>(&matId), sizeof(matId));
                 }
-                const uint rowSize = hierarchicalFF[i].size();
+                const unsigned rowSize = hierarchicalFF[i].size();
                 out.write(reinterpret_cast<const char*>(&rowSize), sizeof(rowSize));
                 for (auto& item: hierarchicalFF[i]) {
                     out.write(reinterpret_cast<const char*>(&item.first), sizeof(item.first));
@@ -124,13 +125,13 @@ class RadiosityProgram : public Hors::Program {
         }
         in.read(reinterpret_cast<char*>(&size), sizeof(size));
         hierarchicalFF.resize(size);
-        for (uint i = 0; i < size; ++i) {
+        for (unsigned i = 0; i < size; ++i) {
             array<ModelVertex, 4> vertices;
             for (auto &vertex : vertices) {
                 glm::vec4 point;
                 glm::vec4 normal;
                 glm::vec2 texCoord;
-                uint matId;
+                unsigned matId;
                 in.read(reinterpret_cast<char*>(&point), sizeof(point));
                 in.read(reinterpret_cast<char*>(&normal), sizeof(normal));
                 in.read(reinterpret_cast<char*>(&texCoord), sizeof(texCoord));
@@ -138,9 +139,9 @@ class RadiosityProgram : public Hors::Program {
                 vertex = ModelVertex(point, normal, texCoord, matId);
             }
             quadsHierarchy.AddQuad(Quad(vertices[0], vertices[1], vertices[2], vertices[3]));
-            uint rowSize = 0;
+            unsigned rowSize = 0;
             in.read(reinterpret_cast<char*>(&rowSize), sizeof(rowSize));
-            for (uint j = 0; j < rowSize; ++j) {
+            for (unsigned j = 0; j < rowSize; ++j) {
                 int key;
                 float value;
                 in.read(reinterpret_cast<char*>(&key), sizeof(key));
@@ -153,11 +154,11 @@ class RadiosityProgram : public Hors::Program {
     void dumpFFMatrix() {
         std::stringstream ss;
         ss << Get("DataDir") << "/Dumps/FlatFF" << Get<int>("MaxHierarchyDepth") << ".bin";
-        uint size = hierarchicalFF.size();
+        unsigned size = hierarchicalFF.size();
         ofstream out(ss.str(), ios::out | ios::binary);
         writeBin(out, size);
-        for (uint i = 0; i < size; ++i) {
-            const uint rowSize = hierarchicalFF[i].size();
+        for (unsigned i = 0; i < size; ++i) {
+            const unsigned rowSize = hierarchicalFF[i].size();
             writeBin(out, rowSize);
             for (const auto& p : hierarchicalFF[i]) {
                 writeBin(out, p.first);
@@ -170,10 +171,10 @@ class RadiosityProgram : public Hors::Program {
     void dumpMultibounceMatrix() {
         std::stringstream ss;
         ss << Get("DataDir") << "/Dumps/MultibounceFF" << Get<int>("MaxHierarchyDepth") << ".bin";
-        uint size = multibounceMatrix.size();
+        unsigned size = multibounceMatrix.size();
         ofstream out(ss.str(), ios::out | ios::binary);
         writeBin(out, size);
-        for (uint i = 0; i < size; ++i) {
+        for (unsigned i = 0; i < size; ++i) {
             for (const auto& f : multibounceMatrix[i]) {
                 writeBin(out, f);
             }
@@ -192,12 +193,12 @@ class RadiosityProgram : public Hors::Program {
 //        vector<glm::vec4> firstBounce;
 //        {
 //            const auto bounces = Get<int>("Bounces");
-//            const auto hierarchyDepth = Get<uint>("MaxHierarchyDepth");
+//            const auto hierarchyDepth = Get<unsigned>("MaxHierarchyDepth");
 //            float res = 0;
 //            const int ITERATIONS_COUNT = 1;
 //            for (int i = 0; i < ITERATIONS_COUNT; ++i) {
 //                clock_t start = clock();
-//                firstBounce = computeIndirectLighting(static_cast<const uint>(bounces));
+//                firstBounce = computeIndirectLighting(static_cast<const unsigned>(bounces));
 //                res += static_cast<float>(clock() - start) / CLOCKS_PER_SEC * 1000;
 //            }
 //            const auto result = res / ITERATIONS_COUNT;
@@ -206,7 +207,7 @@ class RadiosityProgram : public Hors::Program {
 
         computeDynamicIndirectLighting();
 
-        std::vector<std::vector<uint> > indexBuffers;
+        std::vector<std::vector<unsigned> > indexBuffers;
         indexBuffers.resize(materialColors.size());
         std::vector<glm::vec4> quadsNormals;
         for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
@@ -261,7 +262,7 @@ class RadiosityProgram : public Hors::Program {
         glEnable(GL_DEPTH_TEST); CHECK_GL_ERRORS;
     }
 
-    void computeIndirectLighting(const uint bouncesCount) {
+    void computeIndirectLighting(const unsigned bouncesCount) {
         LabeledTimer timer("Full radiosity");
         vector<glm::vec4> prevBounce(quadsHierarchy.GetSize(), glm::vec4(0));
         vector<glm::vec4> bounce(quadsHierarchy.GetSize(), glm::vec4(0));
@@ -269,13 +270,13 @@ class RadiosityProgram : public Hors::Program {
             lighting[i] = materialsEmission[quadsHierarchy.GetQuad(i).GetMaterialId()];
             prevBounce[i] = lighting[i];
         }
-        for (uint k = 0; k < bouncesCount; ++k) {
-            for (uint i = 0; i < hierarchicalFF.size(); ++i) {
+        for (unsigned k = 0; k < bouncesCount; ++k) {
+            for (unsigned i = 0; i < hierarchicalFF.size(); ++i) {
                 for (const auto& it : hierarchicalFF[i]) {
                     bounce[i] += prevBounce[it.first] * it.second;
                 }
             }
-            for (uint i = 0; i < hierarchicalFF.size(); ++i) {
+            for (unsigned i = 0; i < hierarchicalFF.size(); ++i) {
                 lighting[i] += bounce[i];
                 prevBounce[i] = bounce[i] * quadsColors[i];
                 bounce[i] = glm::vec4(0);
@@ -284,10 +285,10 @@ class RadiosityProgram : public Hors::Program {
     }
 
     void computeDynamicIndirectLighting() {
-        for (uint i = 0; i < dynamicMatrix.size(); ++i) {
+        for (unsigned i = 0; i < dynamicMatrix.size(); ++i) {
             lighting[quadsInMatrix[i]] = glm::vec4(0);
             const auto targetId = quadsHierarchy.GetQuad(quadsInMatrix[i]).GetMaterialId();
-            for (uint j = 0; j < dynamicMatrix[i].size(); ++j) {
+            for (unsigned j = 0; j < dynamicMatrix[i].size(); ++j) {
                 const auto materialId = quadsHierarchy.GetQuad(quadsInMatrix[j]).GetMaterialId();
                 lighting[quadsInMatrix[i]] += materialsEmission[materialId] * glm::make_vec4(dynamicMatrix[i][j]);
             }
@@ -298,29 +299,29 @@ class RadiosityProgram : public Hors::Program {
 
     std::vector<std::map<int, float>> FormFactorComputationEmbree(QuadsContainer& quadsHierarchy) {
         std::vector<std::vector<glm::vec4> > points;
-        std::vector<std::vector<uint> > indices;
+        std::vector<std::vector<unsigned> > indices;
         for (auto &SceneMesh : SceneMeshes) {
             std::vector<glm::vec4> meshPoints(SceneMesh.getVerticesNumber());
-            for (uint k = 0; k < meshPoints.size(); ++k) {
+            for (unsigned k = 0; k < meshPoints.size(); ++k) {
                 meshPoints[k] = glm::make_vec4(SceneMesh.getVertexPositionsFloat4Array() + k * 4);
             }
-            std::vector<uint> meshIndices(
+            std::vector<unsigned> meshIndices(
                 SceneMesh.getTriangleVertexIndicesArray(),
                 SceneMesh.getTriangleVertexIndicesArray() + SceneMesh.getIndicesNumber()
             );
             points.emplace_back(meshPoints);
             indices.emplace_back(meshIndices);
         }
-        return ComputeFormFactorsEmbree(quadsHierarchy, points, indices, Get<uint>("MaxHierarchyDepth"));
+        return ComputeFormFactorsEmbree(quadsHierarchy, points, indices, Get<unsigned>("MaxHierarchyDepth"));
     }
 
     void MultiplyMatrices(std::vector<std::vector<glm::vec3> >& a, std::vector<std::vector<glm::vec3> > bTransposed) const {
-        const uint size = a.size();
+        const unsigned size = a.size();
         const auto originCopy = a;
-        for (uint i = 0; i < size; ++i) {
-            for (uint j = 0; j < size; ++j) {
+        for (unsigned i = 0; i < size; ++i) {
+            for (unsigned j = 0; j < size; ++j) {
                 a[i][j] = glm::vec3(0);
-                for (uint k = 0; k < size; ++k) {
+                for (unsigned k = 0; k < size; ++k) {
                     a[i][j] += originCopy[i][k] * bTransposed[j][k];
                 }
             }
@@ -329,9 +330,9 @@ class RadiosityProgram : public Hors::Program {
 
     void ComputeMultibounceMatrix() {
         std::vector<std::vector<glm::vec3> > coloredFF(hierarchicalFF.size());
-        for (uint i = 0; i < coloredFF.size(); ++i) {
+        for (unsigned i = 0; i < coloredFF.size(); ++i) {
             coloredFF[i].assign(hierarchicalFF.size(), glm::vec3(0));
-            for (uint j = 0; j < coloredFF[i].size(); ++j) {
+            for (unsigned j = 0; j < coloredFF[i].size(); ++j) {
                 //FF type was changed
 //                if (hierarchicalFF[i].count(j)) {
 //                    coloredFF[i][j] = hierarchicalFF[j][i] * glm::vec3(materialColors[quadsHierarchy.GetQuad(j).GetMaterialId()]);
@@ -343,7 +344,7 @@ class RadiosityProgram : public Hors::Program {
             if (bounce) {
                 MultiplyMatrices(multibounceMatrix, coloredFF);
             }
-            for (uint i = 0; i < multibounceMatrix.size(); ++i) {
+            for (unsigned i = 0; i < multibounceMatrix.size(); ++i) {
                 multibounceMatrix[i][i] += 1;
             }
         }
@@ -352,53 +353,53 @@ class RadiosityProgram : public Hors::Program {
     void ComputeMultibounceMatrix_v2() {
         multibounceMatrix.assign(1, std::vector<glm::vec3>(1, glm::vec3(1)));
         std::vector<glm::vec3> colors(hierarchicalFF.size());
-        for (uint i = 0; i < colors.size(); ++i) {
+        for (unsigned i = 0; i < colors.size(); ++i) {
             colors[i] = glm::vec3(materialColors[quadsHierarchy.GetQuad(i).GetMaterialId()]);
         }
-        for (uint i = 1; i < hierarchicalFF.size(); ++i) {
+        for (unsigned i = 1; i < hierarchicalFF.size(); ++i) {
             std::vector<glm::vec3> fColumn(multibounceMatrix.size());
             std::vector<glm::vec3> fRow(multibounceMatrix.size());
 
             //hierarchicalFF type was changed.
-//            for (uint j = 0; j < fColumn.size(); ++j) {
+//            for (unsigned j = 0; j < fColumn.size(); ++j) {
 //                fColumn[j] = glm::vec3(hierarchicalFF[j][i]);
 //                fRow[j] = glm::vec3(hierarchicalFF[i][j]);
 //            }
             std::vector<glm::vec3> gColumn(fColumn), gRow(fRow);
             glm::vec3 doubleReflection(0);
-            for (uint j = 0; j < fColumn.size(); ++j) {
+            for (unsigned j = 0; j < fColumn.size(); ++j) {
                 doubleReflection += fRow[j] * fColumn[j] * colors[j];
             }
-            for (uint j = 0; j < fColumn.size(); ++j) {
+            for (unsigned j = 0; j < fColumn.size(); ++j) {
                 gColumn[j] += fColumn[j] * colors[i] * doubleReflection;
                 gRow[j] += fRow[j] * colors[i] * doubleReflection;
             }
             std::vector<glm::vec3> interReflection(fColumn.size(), glm::vec3(0));
-            for (uint j = 0; j < fColumn.size(); ++j) {
-                for (uint k = 0; k < fColumn.size(); ++k) {
+            for (unsigned j = 0; j < fColumn.size(); ++j) {
+                for (unsigned k = 0; k < fColumn.size(); ++k) {
                     interReflection[j] += multibounceMatrix[j][k] * fColumn[k] * colors[k];
                 }
                 gColumn[j] += interReflection[j];
             }
             interReflection.assign(fColumn.size(), glm::vec3(0));
-            for (uint j = 0; j < fColumn.size(); ++j) {
-                for (uint k = 0; k < fColumn.size(); ++k) {
+            for (unsigned j = 0; j < fColumn.size(); ++j) {
+                for (unsigned k = 0; k < fColumn.size(); ++k) {
                     interReflection[j] += multibounceMatrix[k][j] * fRow[k] * colors[k];
                 }
                 gRow[j] += interReflection[j];
             }
-            for (uint j = 0; j < fColumn.size(); ++j) {
-                for (uint k = 0; k < fRow.size(); ++k) {
+            for (unsigned j = 0; j < fColumn.size(); ++j) {
+                for (unsigned k = 0; k < fRow.size(); ++k) {
                     multibounceMatrix[j][k] += gColumn[j] * gRow[k] * colors[i];
                 }
             }
-            for (uint j = 0; j < fColumn.size(); ++j) {
+            for (unsigned j = 0; j < fColumn.size(); ++j) {
                 multibounceMatrix[j].push_back(gColumn[j]);
             }
             multibounceMatrix.push_back(gRow);
             multibounceMatrix.back().push_back(glm::vec3(1));
-            for (uint j = 0; j < gColumn.size(); ++j) {
-                for (uint k = 0; k < gColumn.size(); ++k) {
+            for (unsigned j = 0; j < gColumn.size(); ++j) {
+                for (unsigned k = 0; k < gColumn.size(); ++k) {
                     multibounceMatrix.back().back() += gColumn[j] * gRow[k] * colors[k];
                 }
             }
@@ -412,19 +413,21 @@ class RadiosityProgram : public Hors::Program {
         texData.resize(texData.size() + 1);
         texData.back().resize(record.height);
         std::vector<unsigned char> data(record.bytesize);
-        for (uint i = 0; i < record.height; ++i) {
+        for (unsigned i = 0; i < record.height; ++i) {
             texData.back()[i].resize(record.width);
-            for (uint j = 0; j < record.width; ++j) {
-                for (uint k = 0; k < 4; ++k) {
+            for (unsigned j = 0; j < record.width; ++j) {
+                for (unsigned k = 0; k < 4; ++k) {
                     in.read(reinterpret_cast<char *>(&data[(i * record.width + j) * 4 + k]), sizeof(char));
                     texData.back()[i][j][k] = data[(i * record.width + j) * 4 + k] / 255.f;
                 }
             }
         }
+
         GLuint texId;
+        CHECK_GL_ERRORS;
         glGenTextures(1, &texId); CHECK_GL_ERRORS;
-        glActiveTexture(GL_TEXTURE0 + record.id);
-        glBindTexture(GL_TEXTURE_2D, texId);
+        glActiveTexture(GL_TEXTURE0 + record.id); CHECK_GL_ERRORS;
+        glBindTexture(GL_TEXTURE_2D, texId); CHECK_GL_ERRORS;
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, record.width, record.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data.data()); CHECK_GL_ERRORS;
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); CHECK_GL_ERRORS;
         glGenerateMipmap(GL_TEXTURE_2D); CHECK_GL_ERRORS;
@@ -432,6 +435,7 @@ class RadiosityProgram : public Hors::Program {
     }
 
     void CreateTextures() {
+//        CHECK_GL_ERRORS;
         const auto records = sceneProperties->GetTextures();
         for (const auto& rec: records) {
             textures.push_back(CreateTex(rec));
@@ -444,41 +448,41 @@ class RadiosityProgram : public Hors::Program {
             std::vector<glm::vec3> fColumn(dynamicMatrix.size());
             std::vector<glm::vec3> fRow(dynamicMatrix.size());
 
-            for (uint j = 0; j < fColumn.size(); ++j) {
+            for (unsigned j = 0; j < fColumn.size(); ++j) {
                 fColumn[j] = glm::vec3(hierarchicalFF[quadsInMatrix[j]][quadsInMatrix[i]]);
                 fRow[j] = glm::vec3(hierarchicalFF[quadsInMatrix[i]][quadsInMatrix[j]]);
             }
             std::vector<glm::vec3> gColumn(fColumn), gRow(fRow);
             glm::vec3 doubleReflection(0);
-            for (uint j = 0; j < fColumn.size(); ++j) {
+            for (unsigned j = 0; j < fColumn.size(); ++j) {
                 doubleReflection += fRow[j] * fColumn[j] * glm::vec3(quadsColors[quadsInMatrix[j]]);
             }
-            for (uint j = 0; j < fColumn.size(); ++j) {
+            for (unsigned j = 0; j < fColumn.size(); ++j) {
                 gColumn[j] += fColumn[j] * glm::vec3(quadsColors[quadsInMatrix[i]]) * doubleReflection;
                 gRow[j] += fRow[j] * glm::vec3(quadsColors[quadsInMatrix[i]]) * doubleReflection;
             }
-            for (uint j = 0; j < fColumn.size(); ++j) {
-                for (uint k = 0; k < fColumn.size(); ++k) {
+            for (unsigned j = 0; j < fColumn.size(); ++j) {
+                for (unsigned k = 0; k < fColumn.size(); ++k) {
                     gColumn[j] += dynamicMatrix[j][k] * fColumn[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
                 }
             }
-            for (uint j = 0; j < fColumn.size(); ++j) {
-                for (uint k = 0; k < fColumn.size(); ++k) {
+            for (unsigned j = 0; j < fColumn.size(); ++j) {
+                for (unsigned k = 0; k < fColumn.size(); ++k) {
                     gRow[j] += dynamicMatrix[k][j] * fRow[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
                 }
             }
-            for (uint j = 0; j < fColumn.size(); ++j) {
-                for (uint k = 0; k < fRow.size(); ++k) {
+            for (unsigned j = 0; j < fColumn.size(); ++j) {
+                for (unsigned k = 0; k < fRow.size(); ++k) {
                     dynamicMatrix[j][k] += gColumn[j] * gRow[k] * glm::vec3(quadsColors[quadsInMatrix[i]]);
                 }
             }
-            for (uint j = 0; j < fColumn.size(); ++j) {
+            for (unsigned j = 0; j < fColumn.size(); ++j) {
                 dynamicMatrix[j].push_back(gColumn[j]);
             }
             dynamicMatrix.push_back(gRow);
             dynamicMatrix.back().push_back(glm::vec3(1));
-            for (uint j = 0; j < gColumn.size(); ++j) {
-                for (uint k = 0; k < gColumn.size(); ++k) {
+            for (unsigned j = 0; j < gColumn.size(); ++j) {
+                for (unsigned k = 0; k < gColumn.size(); ++k) {
                     dynamicMatrix.back().back() += gColumn[j] * gRow[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
                 }
             }
@@ -488,7 +492,7 @@ class RadiosityProgram : public Hors::Program {
     std::pair<int, float> FarthestIncludedDistance() {
         float dist = 0;
         int idx = 0;
-        for (uint i = 0; i < quadsInMatrix.size(); ++i) {
+        for (unsigned i = 0; i < quadsInMatrix.size(); ++i) {
             if (find(lightQuads.begin(), lightQuads.end(), quadsInMatrix[i]) != lightQuads.end()) {
                 continue;
             }
@@ -504,7 +508,7 @@ class RadiosityProgram : public Hors::Program {
     pair<int, float> NearestExcludedDistance() {
         float dist = 1e6;
         int idx = 0;
-        for (uint i = 0; i < quadCenters.size(); ++i) {
+        for (unsigned i = 0; i < quadCenters.size(); ++i) {
             if (std::find(quadsInMatrix.begin(), quadsInMatrix.end(), i) != quadsInMatrix.end()) {
                 continue;
             }
@@ -519,66 +523,66 @@ class RadiosityProgram : public Hors::Program {
 
     void RemoveFromMatrix(const int idx) {
         LabeledTimer timer("RemoveFromMatrix");
-        for (uint i = 0; i < dynamicMatrix.size(); ++i) {
+        for (unsigned i = 0; i < dynamicMatrix.size(); ++i) {
             dynamicMatrix[idx][i] = glm::vec3(0);
             dynamicMatrix[i][idx] = glm::vec3(0);
         }
     }
 
-    void AddToMatrix(const int idx, const uint place) {
+    void AddToMatrix(const int idx, const unsigned place) {
         LabeledTimer timer("AddToMatrix");
         std::vector<glm::vec3> fColumn(dynamicMatrix.size(), glm::vec3(0));
         std::vector<glm::vec3> fRow(dynamicMatrix.size(), glm::vec3(0));
 
-        for (uint j = 0; j < place; ++j) {
+        for (unsigned j = 0; j < place; ++j) {
             fColumn[j] = glm::vec3(hierarchicalFF[quadsInMatrix[j]][idx]);
             fRow[j] = glm::vec3(hierarchicalFF[idx][quadsInMatrix[j]]);
         }
-        for (uint j = place - 1; j < fColumn.size(); ++j) {
+        for (unsigned j = place - 1; j < fColumn.size(); ++j) {
             fColumn[j] = glm::vec3(hierarchicalFF[quadsInMatrix[j]][idx]);
             fRow[j] = glm::vec3(hierarchicalFF[idx][quadsInMatrix[j]]);
         }
         std::vector<glm::vec3> gColumn(fColumn), gRow(fRow);
         glm::vec3 doubleReflection(0);
-        for (uint j = 0; j < fColumn.size(); ++j) {
+        for (unsigned j = 0; j < fColumn.size(); ++j) {
             doubleReflection += fRow[j] * fColumn[j] * glm::vec3(quadsColors[quadsInMatrix[j]]);
         }
         doubleReflection *= glm::vec3(quadsColors[quadsInMatrix[place]]);
-        for (uint j = 0; j < fColumn.size(); ++j) {
+        for (unsigned j = 0; j < fColumn.size(); ++j) {
             gColumn[j] += fColumn[j] * doubleReflection;
             gRow[j] += fRow[j] * doubleReflection;
         }
-        for (uint j = 0; j < fColumn.size(); ++j) {
-            for (uint k = 0; k < fColumn.size(); ++k) {
+        for (unsigned j = 0; j < fColumn.size(); ++j) {
+            for (unsigned k = 0; k < fColumn.size(); ++k) {
                 gColumn[j] += dynamicMatrix[j][k] * fColumn[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
             }
         }
-        for (uint j = 0; j < fColumn.size(); ++j) {
-            for (uint k = 0; k < fColumn.size(); ++k) {
+        for (unsigned j = 0; j < fColumn.size(); ++j) {
+            for (unsigned k = 0; k < fColumn.size(); ++k) {
                 gRow[j] += dynamicMatrix[k][j] * fRow[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
             }
         }
-        for (uint j = 0; j < fColumn.size(); ++j) {
+        for (unsigned j = 0; j < fColumn.size(); ++j) {
             if (j == place || usedQuads[quadsInMatrix[j]][idx]) {
                 continue;
             }
-            for (uint k = 0; k < fRow.size(); ++k) {
+            for (unsigned k = 0; k < fRow.size(); ++k) {
                 if (k == place || usedQuads[idx][quadsInMatrix[j]]) {
                     continue;
                 }
                 dynamicMatrix[j][k] += gColumn[j] * gRow[k] * glm::vec3(quadsColors[quadsInMatrix[place]]);
             }
         }
-        for (uint j = 0; j < fColumn.size(); ++j) {
+        for (unsigned j = 0; j < fColumn.size(); ++j) {
             dynamicMatrix[j][place] = gColumn[j];
             dynamicMatrix[place][j] = gRow[j];
         }
         dynamicMatrix[place][place] = glm::vec3(0);
-        for (uint j = 0; j < gColumn.size(); ++j) {
+        for (unsigned j = 0; j < gColumn.size(); ++j) {
             if (j == place || usedQuads[quadsInMatrix[j]][idx]) {
                 continue;
             }
-            for (uint k = 0; k < gColumn.size(); ++k) {
+            for (unsigned k = 0; k < gColumn.size(); ++k) {
                 if (k == place || usedQuads[idx][quadsInMatrix[j]]) {
                     continue;
                 }
@@ -592,7 +596,7 @@ class RadiosityProgram : public Hors::Program {
         computeDynamicIndirectLighting();
         perQuadColors.clear();
         for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
-            for (uint j = 0; j < quadsHierarchy.GetQuad(i).GetVertices().size(); ++j) {
+            for (unsigned j = 0; j < quadsHierarchy.GetQuad(i).GetVertices().size(); ++j) {
                 perQuadColors.emplace_back(lighting[i]);
             }
         }
@@ -603,10 +607,10 @@ class RadiosityProgram : public Hors::Program {
         glBindBuffer(GL_ARRAY_BUFFER, 0); CHECK_GL_ERRORS;
     }
 
-    void UpdateMatrixInfo(const int idx, const uint place) {
+    void UpdateMatrixInfo(const int idx, const unsigned place) {
         LabeledTimer timer("UpdateMatrixInfo");
         usedQuads[quadsInMatrix[place]].assign(usedQuads[quadsInMatrix[place]].size(), false);
-        for (uint i = 0; i < quadsInMatrix.size(); ++i) {
+        for (unsigned i = 0; i < quadsInMatrix.size(); ++i) {
             if (i == place) {
                 continue;
             }
@@ -685,15 +689,17 @@ public:
     }
 
     void Run() final {
+//        CHECK_GL_ERRORS;
         sceneProperties = std::make_unique<Hors::SceneProperties>(Get("ScenePropertiesFile"));
+//        CHECK_GL_ERRORS;
         CreateTextures();
         textureIds = sceneProperties->GetDiffuseTextures();
         auto matrices = sceneProperties->GetMeshMatrices();
         SceneMeshes.resize(matrices.size());
-        for (uint i = 0; i < SceneMeshes.size(); ++i) {
+        for (unsigned i = 0; i < SceneMeshes.size(); ++i) {
             SceneMeshes[i].read(Get("DataDir") + "/" + sceneProperties->GetChunksPaths()[matrices[i].second]);
             std::vector<glm::vec4> points(SceneMeshes[i].getVerticesNumber());
-            for (uint k = 0; k < points.size(); ++k) {
+            for (unsigned k = 0; k < points.size(); ++k) {
                 points[k] = glm::make_vec4(SceneMeshes[i].getVertexPositionsFloat4Array() + k * 4);
             }
             for (auto & point: points) {
@@ -701,7 +707,7 @@ public:
             }
             memcpy(const_cast<float*>(SceneMeshes[i].getVertexPositionsFloat4Array()), points.data(), points.size() * sizeof(points[0]));
             std::vector<glm::vec4> normals(SceneMeshes[i].getVerticesNumber());
-            for (uint k = 0; k < normals.size(); ++k) {
+            for (unsigned k = 0; k < normals.size(); ++k) {
                 normals[k] = glm::make_vec4(SceneMeshes[i].getVertexNormalsFloat4Array() + k * 4);
             }
             for (auto & normal: normals) {
@@ -734,7 +740,7 @@ public:
         computeIndirectLighting(3);
 
         quadsInMatrix.resize(static_cast<unsigned long>(quadsHierarchy.GetSize()));
-        for (uint i = 0; i < quadsInMatrix.size(); ++i) {
+        for (unsigned i = 0; i < quadsInMatrix.size(); ++i) {
             quadsInMatrix[i] = i;
         }
         std::sort(quadsInMatrix.begin(), quadsInMatrix.end(), [this](int i, int j) {
@@ -781,7 +787,7 @@ public:
         glClearColor(0, 0, 0, 0); CHECK_GL_ERRORS;
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); CHECK_GL_ERRORS;
         glPolygonMode(GL_FRONT_AND_BACK, renderLines ? GL_LINE : GL_FILL);
-        for (uint i = 0; i < perMaterialIndices.size(); ++i) {
+        for (unsigned i = 0; i < perMaterialIndices.size(); ++i) {
             Hors::SetUniform(QuadRender, "Tex", textureIds[i] != -1 ? textureIds[i] : 0);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *perMaterialIndices[i]); CHECK_GL_ERRORS;
             glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(perMaterialQuads[i]), GL_UNSIGNED_INT, nullptr); CHECK_GL_ERRORS;

@@ -10,6 +10,7 @@
 
 #include <glm/geometric.hpp>
 #include <glm/vec2.hpp>
+#include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 #include <Hors/include/HydraExport.h>
 
@@ -22,15 +23,15 @@ class ModelVertex {
     glm::vec4 Point;
     glm::vec4 Normal;
     glm::vec2 TextureCoordinates;
-    uint MaterialNumber;
+    unsigned MaterialNumber;
 
 public:
     ModelVertex(): Point(0), Normal(0), TextureCoordinates(0), MaterialNumber(0) {}
-    ModelVertex(const glm::vec4& point, const glm::vec4& normal, const glm::vec2& texCoord, const uint material):
+    ModelVertex(const glm::vec4& point, const glm::vec4& normal, const glm::vec2& texCoord, const unsigned material):
         Point(point), Normal(normal), TextureCoordinates(texCoord), MaterialNumber(material) {}
 
-    ModelVertex(const HydraGeomData& data, const uint i) {
-        const uint index = data.getTriangleVertexIndicesArray()[i];
+    ModelVertex(const HydraGeomData& data, const unsigned i) {
+        const unsigned index = data.getTriangleVertexIndicesArray()[i];
         Point = *reinterpret_cast<const glm::vec4*>(data.getVertexPositionsFloat4Array() + index * 4);
         Normal = glm::normalize(*reinterpret_cast<const glm::vec4*>(data.getVertexNormalsFloat4Array() + index * 4));
         TextureCoordinates = *reinterpret_cast<const glm::vec2*>(data.getVertexTexcoordFloat2Array() + index * 2);
@@ -49,7 +50,7 @@ public:
         return TextureCoordinates;
     }
 
-    uint GetMaterialNumber() const {
+    unsigned GetMaterialNumber() const {
         return MaterialNumber;
     }
 
@@ -132,13 +133,13 @@ public:
     std::vector<Quad> Tessellate(const float minQuadSide) const {
         const auto height = distance(Vertices[0], Vertices[1]);
         const auto width = distance(Vertices[0], Vertices[3]);
-        const auto heightCellsCount = static_cast<uint>(std::ceil(height / minQuadSide));
-        const auto widthCellsCount = static_cast<uint>(std::ceil(width / minQuadSide));
+        const auto heightCellsCount = static_cast<unsigned>(std::ceil(height / minQuadSide));
+        const auto widthCellsCount = static_cast<unsigned>(std::ceil(width / minQuadSide));
         const auto stepHeight = (Vertices[1] - Vertices[0]) / heightCellsCount;
         const auto stepWidth = (Vertices[3] - Vertices[0]) / widthCellsCount;
         std::vector<Quad> result;
-        for (uint i = 0; i < heightCellsCount; ++i) {
-            for (uint j = 0; j < widthCellsCount; ++j) {
+        for (unsigned i = 0; i < heightCellsCount; ++i) {
+            for (unsigned j = 0; j < widthCellsCount; ++j) {
                 result.emplace_back(
                     Quad(
                         Vertices[0] + stepHeight * i + stepWidth * j,
@@ -152,12 +153,12 @@ public:
         return result;
     }
 
-    std::vector<Quad> Tessellate(const uint inSideCount) const {
+    std::vector<Quad> Tessellate(const unsigned inSideCount) const {
         const auto stepHeight = (Vertices[1] - Vertices[0]) / inSideCount;
         const auto stepWidth = (Vertices[3] - Vertices[0]) / inSideCount;
         std::vector<Quad> result;
-        for (uint i = 0; i < inSideCount; ++i) {
-            for (uint j = 0; j < inSideCount; ++j) {
+        for (unsigned i = 0; i < inSideCount; ++i) {
+            for (unsigned j = 0; j < inSideCount; ++j) {
                 result.emplace_back(
                     Quad(
                         Vertices[0] + stepHeight * i + stepWidth * j,
@@ -196,7 +197,7 @@ public:
         }
         const glm::vec4 pointOnPlane = vecBegin + t * (vecEnd - vecBegin);
         float square = 0;
-        for (uint i = 0; i < Vertices.size(); ++i) {
+        for (unsigned i = 0; i < Vertices.size(); ++i) {
             square += std::abs(glm::length(glm::cross(
                 glm::vec3(Vertices[i].GetPoint() - pointOnPlane),
                 glm::vec3(Vertices[(i + 1) % Vertices.size()].GetPoint() - pointOnPlane)
@@ -229,7 +230,7 @@ public:
         this->normal = normal;
     }
 
-    uint GetMaterialId() const {
+    unsigned GetMaterialId() const {
         return Vertices[0].GetMaterialNumber();
     }
 
@@ -325,6 +326,6 @@ public:
     }
 };
 
-std::vector<glm::vec2> GenerateRandomSamples(uint samplesNumber);
+std::vector<glm::vec2> GenerateRandomSamples(unsigned samplesNumber);
 
 #endif //ORCINUS_GEOMETRYTYPES_H

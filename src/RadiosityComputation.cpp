@@ -12,7 +12,7 @@
 
 
 std::vector<glm::vec4> RecomputeColorsForQuadsCPU(
-    const std::vector<std::map<uint, float> > & ff,
+    const std::vector<std::map<unsigned, float> > & ff,
     const std::vector<glm::vec4> & colors,
     const std::vector<glm::vec4> & emission,
     const int iters
@@ -23,12 +23,12 @@ std::vector<glm::vec4> RecomputeColorsForQuadsCPU(
     std::vector<glm::vec4> prevBounce = emission;
     for (int k = 0; k < iters; ++k) {
 #pragma omp parallel for num_threads(THREADS_COUNT)
-        for (uint i = 0; i < lighting.size(); ++i) {
+        for (unsigned i = 0; i < lighting.size(); ++i) {
             for (const auto& ffItem: ff[i]) {
                 bounce[i] += prevBounce[ffItem.first] * ffItem.second;
             }
         }
-        for (uint i = 0; i < lighting.size(); ++i) {
+        for (unsigned i = 0; i < lighting.size(); ++i) {
             lighting[i] += bounce[i] * colors[i];
             prevBounce[i] = bounce[i] * colors[i];
             bounce[i] = glm::vec4(0);
@@ -42,7 +42,7 @@ void RemoveUnnecessaryQuads(
     std::vector<std::map<int, float> > & ff
 ) {
     int z = 0;
-    for (uint i = quads.GetSize() - 1; i >= ff.size(); --i) {
+    for (unsigned i = quads.GetSize() - 1; i >= ff.size(); --i) {
         quads.RemoveQuad(i);
         ++z;
     }
@@ -55,7 +55,7 @@ void RemoveUnnecessaryQuads(
             std::array<std::map<int, float>, THREADS_COUNT> updated;
 #pragma omp parallel for num_threads(THREADS_COUNT)
             for (int threadId = 0; threadId < THREADS_COUNT; ++threadId) {
-                for (uint j = ff.size() / THREADS_COUNT * threadId; j < ff.size() / THREADS_COUNT * (threadId + 1); ++j) {
+                for (unsigned j = ff.size() / THREADS_COUNT * threadId; j < ff.size() / THREADS_COUNT * (threadId + 1); ++j) {
                     updated[threadId].clear();
                     for (const auto it : ff[j]) {
                         if (it.first > i) {
