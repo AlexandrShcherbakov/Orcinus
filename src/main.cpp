@@ -20,7 +20,6 @@
 #include "tesselation.h"
 #include "RadiosityComputation.h"
 
-//#define CHECK_GL_ERRORS
 using namespace std;
 
 inline bool vec4Less(const glm::vec4& a, const glm::vec4& b) {
@@ -57,7 +56,7 @@ class RadiosityProgram : public Hors::Program {
     std::vector<std::map<int, float>> hierarchicalFF;
     QuadsContainer quadsHierarchy;
 
-    Hors::GLBuffer quadPointsBuffer, quadColorsBuffer, quadUVBuffer;
+    Hors::GLBuffer quadPointsBuffer, quadUVBuffer;
     std::vector<Hors::GLBuffer> perMaterialIndices;
     std::vector<unsigned> perMaterialQuads;
     GLuint QuadRender;
@@ -76,6 +75,8 @@ class RadiosityProgram : public Hors::Program {
     std::vector<int> quadsInMatrix;
     std::vector<std::vector<bool>> usedQuads;
     std::vector<std::vector<std::vector<glm::vec4>>> texData;
+    Hors::GLBuffer perQuadIndirect;
+    Hors::GLBuffer localMatrixBuffer;
 
     std::vector<glm::vec4> quadsColors;
 
@@ -229,8 +230,8 @@ class RadiosityProgram : public Hors::Program {
         }
 
         quadPointsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(perQuadPositions);
-        quadColorsBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(perQuadColors);
         quadUVBuffer = Hors::GenAndFillBuffer<GL_ARRAY_BUFFER>(texCoords);
+        perQuadIndirect = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(lighting);
         for (const auto &indexBuffer : indexBuffers) {
             perMaterialIndices.push_back(Hors::GenAndFillBuffer<GL_ELEMENT_ARRAY_BUFFER>(indexBuffer));
             perMaterialQuads.push_back(static_cast<unsigned int &&>(indexBuffer.size()));
@@ -251,15 +252,20 @@ class RadiosityProgram : public Hors::Program {
         glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
         glEnableVertexAttribArray(0); CHECK_GL_ERRORS;
 
-        glBindBuffer(GL_ARRAY_BUFFER, *quadColorsBuffer); CHECK_GL_ERRORS;
-        glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
-        glEnableVertexAttribArray(1); CHECK_GL_ERRORS;
-
         glBindBuffer(GL_ARRAY_BUFFER, *quadUVBuffer); CHECK_GL_ERRORS;
         glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, nullptr); CHECK_GL_ERRORS;
         glEnableVertexAttribArray(2); CHECK_GL_ERRORS;
 
         glEnable(GL_DEPTH_TEST); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *perQuadIndirect); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, *perQuadIndirect); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        localMatrixBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(Get<int>("MatrixSize") * Get<int>("MatrixSize")));
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *localMatrixBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, *localMatrixBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
     }
 
     void computeIndirectLighting(const unsigned bouncesCount) {
@@ -435,7 +441,6 @@ class RadiosityProgram : public Hors::Program {
     }
 
     void CreateTextures() {
-//        CHECK_GL_ERRORS;
         const auto records = sceneProperties->GetTextures();
         for (const auto& rec: records) {
             textures.push_back(CreateTex(rec));
@@ -594,17 +599,11 @@ class RadiosityProgram : public Hors::Program {
     void UpdateLightBuffer() {
         LabeledTimer timer("UpdateLightBuffer");
         computeDynamicIndirectLighting();
-        perQuadColors.clear();
-        for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
-            for (unsigned j = 0; j < quadsHierarchy.GetQuad(i).GetVertices().size(); ++j) {
-                perQuadColors.emplace_back(lighting[i]);
-            }
-        }
 
         glUseProgram(QuadRender); CHECK_GL_ERRORS;
-        glBindBuffer(GL_ARRAY_BUFFER, *quadColorsBuffer); CHECK_GL_ERRORS;
-        glBufferData(GL_ARRAY_BUFFER, perQuadColors.size() * sizeof(perQuadColors[0]), perQuadColors.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
-        glBindBuffer(GL_ARRAY_BUFFER, 0); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *perQuadIndirect); CHECK_GL_ERRORS;
+        glBufferData(GL_SHADER_STORAGE_BUFFER, lighting.size() * sizeof(lighting[0]), lighting.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
     }
 
     void UpdateMatrixInfo(const int idx, const unsigned place) {
@@ -623,20 +622,21 @@ class RadiosityProgram : public Hors::Program {
     void RecomputeLighting() {
         const auto includedDist = FarthestIncludedDistance();
         const auto excludedDist = NearestExcludedDistance();
-        static int z = 0;
+//        static int z = 0;
         if (excludedDist.second >= includedDist.second) {
-            if (z) {
-                cout << z << endl;
-                z = 0;
-                UpdateLightBuffer();
-            }
+//            if (z) {
+//                cout << z << endl;
+//                z = 0;
+//
+//            }
             return;
         }
-        z++;
+//        z++;
         LabeledTimer timer("RecomputeLighting");
         RemoveFromMatrix(includedDist.first);
         AddToMatrix(excludedDist.first, includedDist.first);
         UpdateMatrixInfo(excludedDist.first, includedDist.first);
+        UpdateLightBuffer();
     }
 
     void ComputeQuadColors() {
@@ -689,9 +689,7 @@ public:
     }
 
     void Run() final {
-//        CHECK_GL_ERRORS;
         sceneProperties = std::make_unique<Hors::SceneProperties>(Get("ScenePropertiesFile"));
-//        CHECK_GL_ERRORS;
         CreateTextures();
         textureIds = sceneProperties->GetDiffuseTextures();
         auto matrices = sceneProperties->GetMeshMatrices();
