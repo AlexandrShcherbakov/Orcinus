@@ -261,11 +261,6 @@ class RadiosityProgram : public Hors::Program {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, *perQuadIndirect); CHECK_GL_ERRORS;
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, *perQuadIndirect); CHECK_GL_ERRORS;
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
-
-        localMatrixBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(Get<int>("MatrixSize") * Get<int>("MatrixSize")));
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *localMatrixBuffer); CHECK_GL_ERRORS;
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, *localMatrixBuffer); CHECK_GL_ERRORS;
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
     }
 
     void computeIndirectLighting(const unsigned bouncesCount) {
@@ -492,6 +487,17 @@ class RadiosityProgram : public Hors::Program {
                 }
             }
         }
+        std::vector<glm::vec4> flatDynamicMatrix;
+        flatDynamicMatrix.reserve(Get<int>("MatrixSize") * Get<int>("MatrixSize"));
+        for (const auto& row: dynamicMatrix) {
+            for (const auto& value :row) {
+                flatDynamicMatrix.push_back(glm::vec4(value, 1));
+            }
+        }
+        localMatrixBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(flatDynamicMatrix);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *localMatrixBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, *localMatrixBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
     }
 
     std::pair<int, float> FarthestIncludedDistance() {
@@ -594,6 +600,19 @@ class RadiosityProgram : public Hors::Program {
                 dynamicMatrix[place][place] += gColumn[j] * gRow[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
             }
         }
+
+        std::vector<glm::vec4> flatDynamicMatrix;
+        flatDynamicMatrix.reserve(Get<int>("MatrixSize") * Get<int>("MatrixSize"));
+        for (const auto& row: dynamicMatrix) {
+            for (const auto& value :row) {
+                flatDynamicMatrix.push_back(glm::vec4(value, 1));
+            }
+        }
+
+        glUseProgram(QuadRender); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *localMatrixBuffer); CHECK_GL_ERRORS;
+        glBufferData(GL_SHADER_STORAGE_BUFFER, flatDynamicMatrix.size() * sizeof(flatDynamicMatrix[0]), flatDynamicMatrix.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
     }
 
     void UpdateLightBuffer() {
