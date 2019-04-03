@@ -1,0 +1,137 @@
+#version 450
+
+uniform int dynamicMatrixSize;
+//uniform int index;
+uniform int place;
+
+const int MATRIX_SIZE = 512;
+
+shared vec4 buff[MATRIX_SIZE];
+
+layout(std430, binding = 1) buffer layoutName2
+{
+    vec4 localMatrix[];
+};
+
+layout(std430, binding = 2) buffer layoutName3
+{
+    uint quadsInMatrix[];
+};
+
+struct material
+{
+    vec4 color;
+    vec4 emission;
+};
+
+layout(std430, binding = 3) buffer layoutName4
+{
+    material mats[];
+};
+
+
+layout(std430, binding = 4) buffer layoutName5
+{
+    vec4 gColumn[];
+};
+
+
+layout(std430, binding = 5) buffer layoutName6
+{
+    vec4 gRow[];
+};
+
+
+layout(local_size_x = MATRIX_SIZE, local_size_y = 1) in;
+void main() {
+    uint idx = quadsInMatrix[gl_GlobalInvocationID.x];
+    memoryBarrier();
+    buff[gl_GlobalInvocationID.x] = gColumn[gl_GlobalInvocationID.x] * gRow[gl_GlobalInvocationID.x] * mats[idx].color;
+
+    memoryBarrier();
+
+    for (int i = MATRIX_SIZE / 2; i > 1; i >>= 1) {
+        if (gl_GlobalInvocationID.x < i) {
+            buff[gl_GlobalInvocationID.x] += buff[i + gl_GlobalInvocationID.x];
+        }
+        memoryBarrier();
+    }
+
+    if (gl_GlobalInvocationID.x == 0) {
+        localMatrix[place * MATRIX_SIZE + place] = buff[0];
+    }
+}
+
+
+//layout(local_size_x = MATRIX_SIZE, local_size_y = 1) in;
+//void main() {
+//    uint idx = quadsInMatrix[gl_GlobalInvocationID.x];
+//    vec4 fColumn = vec4(0);
+//    vec4 fRow = vec4(0);
+//    if (gl_GlobalInvocationID.x == place) {
+//        fColumn = f_col[gl_GlobalInvocationID.x];//localMatrix[gl_GlobalInvocationID.x * MATRIX_SIZE + index];
+//        fRow = f_col[gl_GlobalInvocationID.x];//localMatrix[index * MATRIX_SIZE + gl_GlobalInvocationID.x];
+//    }
+//    vec4 color = mats[idx].color;
+//    colors[gl_GlobalInvocationID.x] = mats[idx].color;
+//    double_reflection[gl_GlobalInvocationID.x] = fColumn * fRow * color;
+//    f_column[gl_GlobalInvocationID.x] = fColumn;
+//    f_row[gl_GlobalInvocationID.x] = fRow;
+//    memoryBarrier();
+//
+//    for (int i = MATRIX_SIZE / 2; i > 1; i >>= 1) {
+//        if (gl_GlobalInvocationID.x < i) {
+//            double_reflection[gl_GlobalInvocationID.x] += double_reflection[i + gl_GlobalInvocationID.x];
+//        }
+//        memoryBarrier();
+//    }
+//
+//    if (gl_GlobalInvocationID.x == 0) {
+//        double_reflection[0] *= colors[place];
+//    }
+//    memoryBarrier();
+//
+//    vec4 doubleReflection = double_reflection[0];
+//
+//    vec4 gColumn = fColumn + fColumn * doubleReflection;
+//    vec4 gRow = fRow + fRow * doubleReflection;
+//
+//    for (int i = 0; i < MATRIX_SIZE; ++i) {
+//        gColumn += localMatrix[gl_GlobalInvocationID.x * MATRIX_SIZE + i] * f_column[i] * colors[i];
+//    }
+//
+//    for (int i = 0; i < MATRIX_SIZE; ++i) {
+//        gRow += localMatrix[i * MATRIX_SIZE + gl_GlobalInvocationID.x] * f_row[i] * colors[i];
+//    }
+//
+////    if (gl_GlobalInvocationID.x != place && usedQuads[idx * MATRIX_SIZE + index] == 0) {
+//    if (gl_GlobalInvocationID.x != place) {
+//        for (int i = 0; i < MATRIX_SIZE; ++i) {
+//            if (i != place) {
+//                localMatrix[gl_GlobalInvocationID.x * MATRIX_SIZE + i] += gColumn * gRow * colors[place];
+//            }
+//        }
+//    }
+//    memoryBarrier();
+//
+//    localMatrix[gl_GlobalInvocationID.x * MATRIX_SIZE + place] = gColumn;
+//    localMatrix[place * MATRIX_SIZE + gl_GlobalInvocationID.x] = gRow;
+//
+//    memoryBarrier();
+//    f_column[gl_GlobalInvocationID.x] = gColumn * gRow * color;
+//
+//    memoryBarrier();
+//
+//    for (int i = MATRIX_SIZE / 2; i > 1; i >>= 1) {
+//        if (gl_GlobalInvocationID.x < i) {
+//            f_column[gl_GlobalInvocationID.x] += f_column[i + gl_GlobalInvocationID.x];
+//        }
+//        memoryBarrier();
+//    }
+//
+//    if (gl_GlobalInvocationID.x == 0) {
+//        localMatrix[place * MATRIX_SIZE + place] = f_column[0];
+//    }
+//
+////    localMatrix[gl_GlobalInvocationID.x] = fColumn;
+//}

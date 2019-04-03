@@ -35,6 +35,7 @@ void main() {
     for (int i = 0; i < dynamicMatrixSize; ++i) {
         lighting += mats[quadsInMatrix[i]].emission * localMatrix[gl_GlobalInvocationID.x * dynamicMatrixSize + i];
     }
-    indirect_light[globalIdx] *= mats[globalIdx].color;
-    indirect_light[globalIdx] += mats[globalIdx].emission;
+    lighting *= mats[globalIdx].color;
+    lighting += mats[globalIdx].emission;
+    indirect_light[globalIdx] = lighting;
 }
