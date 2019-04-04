@@ -908,6 +908,9 @@ public:
 
         AddKeyboardEvent('z', [this](){ renderLines = !renderLines; });
         AddKeyboardEvent('p', [this](){ std::cout << MainCamera.GetPosition().x << ' ' << MainCamera.GetPosition().y << ' ' << MainCamera.GetPosition().z << std::endl; });
+        AddKeyboardEvent('m', [this](){
+            MainCamera.SetPosition(glm::vec3(-0.207217, 0.356178, -0.0529972));
+        });
     }
 
     void RenderFunction() final {
