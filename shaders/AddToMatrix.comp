@@ -41,6 +41,11 @@ layout(std430, binding = 5) buffer layoutName6
     vec4 gRow[];
 };
 
+layout(std430, binding = 6) buffer layoutName7
+{
+    int usedQuads[];
+};
+
 
 layout(local_size_x = MATRIX_SIZE, local_size_y = 1) in;
 void main() {
@@ -50,6 +55,21 @@ void main() {
     vec4 color = mats[idx].color;
     vec4 g_column = gColumn[trIdx];
     vec4 g_row = gRow[trIdx];
+    vec4 placeColor = mats[quadsInMatrix[place]].color;
+
+
+    for (int i = 0; i < MATRIX_SIZE; ++i) {
+        if (usedQuads[i] != 0) {
+            continue;
+        }
+        if (trIdx == i) {
+            buff[0] = g_column * placeColor;
+        }
+        memoryBarrier();
+        localMatrix[i * MATRIX_SIZE + trIdx] += g_row * buff[0];
+        memoryBarrier();
+    }
+
     buff[trIdx] = g_column * g_row * color;
 
     localMatrix[place * MATRIX_SIZE + trIdx] = g_row;
