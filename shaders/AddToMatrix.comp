@@ -44,20 +44,27 @@ layout(std430, binding = 5) buffer layoutName6
 
 layout(local_size_x = MATRIX_SIZE, local_size_y = 1) in;
 void main() {
-    uint idx = quadsInMatrix[gl_GlobalInvocationID.x];
-    memoryBarrier();
-    buff[gl_GlobalInvocationID.x] = gColumn[gl_GlobalInvocationID.x] * gRow[gl_GlobalInvocationID.x] * mats[idx].color;
+    uint trIdx = gl_GlobalInvocationID.x;
+
+    uint idx = quadsInMatrix[trIdx];
+    vec4 color = mats[idx].color;
+    vec4 g_column = gColumn[trIdx];
+    vec4 g_row = gRow[trIdx];
+    buff[trIdx] = g_column * g_row * color;
+
+    localMatrix[place * MATRIX_SIZE + trIdx] = g_row;
+    localMatrix[trIdx * MATRIX_SIZE + place] = g_column;
 
     memoryBarrier();
 
     for (int i = MATRIX_SIZE / 2; i > 1; i >>= 1) {
-        if (gl_GlobalInvocationID.x < i) {
-            buff[gl_GlobalInvocationID.x] += buff[i + gl_GlobalInvocationID.x];
+        if (trIdx < i) {
+            buff[trIdx] += buff[i + trIdx];
         }
         memoryBarrier();
     }
 
-    if (gl_GlobalInvocationID.x == 0) {
+    if (trIdx == 0) {
         localMatrix[place * MATRIX_SIZE + place] = buff[0];
     }
 }

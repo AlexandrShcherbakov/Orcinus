@@ -636,11 +636,11 @@ class RadiosityProgram : public Hors::Program {
                 dynamicMatrix[j][k] += gColumn[j] * gRow[k] * glm::vec3(quadsColors[quadsInMatrix[place]]);
             }
         }
-        for (unsigned j = 0; j < fColumn.size(); ++j) {
-            dynamicMatrix[j][place] = gColumn[j];
-            dynamicMatrix[place][j] = gRow[j];
-        }
-        dynamicMatrix[place][place] = glm::vec3(0);
+//        for (unsigned j = 0; j < fColumn.size(); ++j) {
+//            dynamicMatrix[j][place] = gColumn[j];
+//            dynamicMatrix[place][j] = gRow[j];
+//        }
+//        dynamicMatrix[place][place] = glm::vec3(0);
 //        for (unsigned j = 0; j < gColumn.size(); ++j) {
 //            if (j == place || usedQuads[quadsInMatrix[j]][idx]) {
 //                continue;
