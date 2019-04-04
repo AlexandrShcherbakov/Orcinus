@@ -626,13 +626,10 @@ class RadiosityProgram : public Hors::Program {
             }
         }
         for (unsigned j = 0; j < fColumn.size(); ++j) {
-            if (j == place || usedQuads[quadsInMatrix[j]][idx]) {
+            if (usedQuads[quadsInMatrix[j]][idx]) {
                 continue;
             }
             for (unsigned k = 0; k < fRow.size(); ++k) {
-                if (k == place || usedQuads[idx][quadsInMatrix[j]]) {
-                    continue;
-                }
                 dynamicMatrix[j][k] += gColumn[j] * gRow[k] * glm::vec3(quadsColors[quadsInMatrix[place]]);
             }
         }
