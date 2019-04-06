@@ -82,7 +82,7 @@ class RadiosityProgram : public Hors::Program {
     Hors::GLBuffer quadsInMatrixBuffer;
     Hors::GLBuffer materialsBuffer;
     Hors::GLBuffer usedQuadsBuffer;
-    Hors::GLBuffer fColumnBuffer, gColumnBuffer, gRowBuffer;
+    Hors::GLBuffer fColumnBuffer, gColumnBuffer, gRowBuffer, fRowBuffer;
 
     std::vector<glm::vec4> quadsColors;
 
@@ -225,7 +225,7 @@ class RadiosityProgram : public Hors::Program {
         vector<glm::vec4> materials;
         for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
             const int matId = quadsHierarchy.GetQuad(i).GetMaterialId();
-            materials.push_back(materialColors[matId]);
+            materials.push_back(quadsColors[i]);
             materials.push_back(materialsEmission[matId]);
         }
         materialsBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(materials);
@@ -233,6 +233,7 @@ class RadiosityProgram : public Hors::Program {
 //        fColumnBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(Get<int>("MatrixSize")));
         gColumnBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(Get<int>("MatrixSize")));;
         gRowBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(Get<int>("MatrixSize")));
+        fRowBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(Get<int>("MatrixSize")));
 
         QuadRender = Hors::CompileShaderProgram(
             Hors::ReadAndCompileShader("shaders/QuadRender.vert", GL_VERTEX_SHADER),
@@ -287,6 +288,7 @@ class RadiosityProgram : public Hors::Program {
         addToMatrixCS = Hors::CompileComputeShaderProgram(
                 Hors::ReadAndCompileShader("shaders/AddToMatrix.comp", GL_COMPUTE_SHADER)
         );
+        cout << addToMatrixCS << endl;
         glUseProgram(addToMatrixCS); CHECK_GL_ERRORS;
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, *quadsInMatrixBuffer); CHECK_GL_ERRORS;
@@ -307,6 +309,10 @@ class RadiosityProgram : public Hors::Program {
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, *usedQuadsBuffer); CHECK_GL_ERRORS;
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, *usedQuadsBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *fRowBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, *fRowBuffer); CHECK_GL_ERRORS;
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
     }
 
@@ -642,17 +648,18 @@ class RadiosityProgram : public Hors::Program {
 //            dynamicMatrix[place][j] = gRow[j];
 //        }
 //        dynamicMatrix[place][place] = glm::vec3(0);
+//        glm::vec3 value(0);
+//        for (unsigned k = 0; k < gColumn.size(); ++k) {
+//            value += gRow[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
+//        }
+//        glm::vec3 anotherValue(0);
 //        for (unsigned j = 0; j < gColumn.size(); ++j) {
-//            if (j == place || usedQuads[quadsInMatrix[j]][idx]) {
+//            if (usedQuads[quadsInMatrix[j]][idx]) {
 //                continue;
 //            }
-//            for (unsigned k = 0; k < gColumn.size(); ++k) {
-//                if (k == place) {
-//                    continue;
-//                }
-//                dynamicMatrix[place][place] += gColumn[j] * gRow[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
-//            }
+//            anotherValue += gColumn[j];
 //        }
+//        dynamicMatrix[place][place] = anotherValue * value;
 
         std::vector<glm::vec4> flatDynamicMatrix;
         flatDynamicMatrix.reserve(Get<int>("MatrixSize") * Get<int>("MatrixSize"));
@@ -674,10 +681,16 @@ class RadiosityProgram : public Hors::Program {
             gRowToBuffer.push_back(glm::vec4(value, 1));
         }
 
+        std::vector<glm::vec4> fRowToBuffer;
+        fRowToBuffer.reserve(Get<int>("MatrixSize"));
+        for (const auto& value: fRow) {
+            fRowToBuffer.push_back(glm::vec4(value, 1));
+        }
+
         std::vector<int> usedToBuffer;
         usedToBuffer.reserve(Get<int>("MatrixSize"));
         for (unsigned j = 0; j < fColumn.size(); ++j) {
-            usedToBuffer.push_back(usedQuads[quadsInMatrix[j]][idx]);
+            usedToBuffer.push_back(usedQuads[quadsInMatrix[j]][idx] ? 1 : 0);
         }
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, *localMatrixBuffer); CHECK_GL_ERRORS;
@@ -692,9 +705,15 @@ class RadiosityProgram : public Hors::Program {
         glBufferData(GL_SHADER_STORAGE_BUFFER, gRowToBuffer.size() * sizeof(gRowToBuffer[0]), gRowToBuffer.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
 
+//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *fRowBuffer); CHECK_GL_ERRORS;
+//        glBufferData(GL_SHADER_STORAGE_BUFFER, fRowToBuffer.size() * sizeof(fRowToBuffer[0]), fRowToBuffer.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
+//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, *usedQuadsBuffer); CHECK_GL_ERRORS;
         glBufferData(GL_SHADER_STORAGE_BUFFER, usedToBuffer.size() * sizeof(usedToBuffer[0]), usedToBuffer.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glFlush(); CHECK_GL_ERRORS;
 
         Hors::SetUniform(addToMatrixCS, "place", place);
 
@@ -878,6 +897,9 @@ public:
                    || ((light1 == light2) && glm::distance(quadCenters[i], MainCamera.GetPosition()) < glm::distance(quadCenters[j], MainCamera.GetPosition()));
         });
         quadsInMatrix.resize(Get<int>("MatrixSize"));
+
+        PrepareBuffers();
+
         InitDynamicMatrix();
         usedQuads.resize(static_cast<unsigned long>(quadsHierarchy.GetSize()));
         for (auto &usedQuad : usedQuads) {
@@ -890,8 +912,6 @@ public:
         }
 
         cout << "Dynamic matrix prepared" << endl;
-
-        PrepareBuffers();
 
         int formFactorsCount = 0;
         int maxFormFactorsCount = 0;

@@ -7,6 +7,7 @@ uniform int place;
 const int MATRIX_SIZE = 512;
 
 shared vec4 buff[MATRIX_SIZE];
+shared vec4 buff2[MATRIX_SIZE];
 
 layout(std430, binding = 1) buffer layoutName2
 {
@@ -46,6 +47,11 @@ layout(std430, binding = 6) buffer layoutName7
     int usedQuads[];
 };
 
+layout(std430, binding = 7) buffer layoutName8
+{
+    vec4 fRow[];
+};
+
 
 layout(local_size_x = MATRIX_SIZE, local_size_y = 1) in;
 void main() {
@@ -58,6 +64,11 @@ void main() {
     vec4 placeColor = mats[quadsInMatrix[place]].color;
 
 
+//    for (int i = 0; i < MATRIX_SIZE; ++i) {
+//        g_row += localMatrix[i * MATRIX_SIZE + trIdx] * fRow[i] * mats[quadsInMatrix[i]].color;
+//    }
+
+
     for (int i = 0; i < MATRIX_SIZE; ++i) {
         if (usedQuads[i] != 0) {
             continue;
@@ -65,27 +76,63 @@ void main() {
         if (trIdx == i) {
             buff[0] = g_column * placeColor;
         }
-        memoryBarrier();
+        memoryBarrierShared();
+        barrier();
         localMatrix[i * MATRIX_SIZE + trIdx] += g_row * buff[0];
-        memoryBarrier();
+        memoryBarrierShared();
+        barrier();
     }
 
-    buff[trIdx] = g_column * g_row * color;
+    buff[trIdx] = g_row * color;
+    buff2[trIdx] = (usedQuads[trIdx] != 0) ? vec4(0) : g_column;
 
     localMatrix[place * MATRIX_SIZE + trIdx] = g_row;
     localMatrix[trIdx * MATRIX_SIZE + place] = g_column;
 
-    memoryBarrier();
+    memoryBarrierShared();
+    barrier();
 
-    for (int i = MATRIX_SIZE / 2; i > 1; i >>= 1) {
+    for (int i = MATRIX_SIZE / 2; i > 0; i >>= 1) {
         if (trIdx < i) {
             buff[trIdx] += buff[i + trIdx];
+            buff2[trIdx] += buff2[i + trIdx];
         }
-        memoryBarrier();
+//        if (trIdx < i) {
+//            buff[trIdx] = max(buff[trIdx], buff[i + trIdx]);
+//        }
+        memoryBarrierShared();
+        barrier();
     }
 
+//    vec4 res = vec4(0);
+//    vec4 res2 = vec4(0);
+//    if (trIdx == 0) {
+//        for (int i = 0; i < MATRIX_SIZE; ++i) {
+//            res += buff[i];
+//            res2 += buff2[i];
+//        }
+//    }
+
+//    vec4 res = vec4(0);
+//    vec4 res2 = vec4(0);
+//    if (trIdx == 0) {
+//        for (int i = 0; i < 64; ++i) {
+//            res += buff[i];
+//            res2 += buff2[i];
+//        }
+//    }
+
+//    for (int i = MATRIX_SIZE - 1; i > 0; --i) {
+//        if (trIdx == 0) {
+//            buff[trIdx] += buff[i];
+//            buff2[trIdx] += buff2[i];
+//        }
+//        memoryBarrier();
+//    }
+
     if (trIdx == 0) {
-        localMatrix[place * MATRIX_SIZE + place] = buff[0];
+//        localMatrix[place * MATRIX_SIZE + place] = res;//buff[0] * buff2[0];
+        localMatrix[place * MATRIX_SIZE + place] = buff[0] * buff2[0];
     }
 }
 
