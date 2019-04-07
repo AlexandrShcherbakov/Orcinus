@@ -77,14 +77,25 @@ void main() {
     g_column += f_column * double_reflection;
     g_row += fRow[trIdx] * double_reflection;
 
-    for (int i = 0; i < MATRIX_SIZE; ++i) {
-        g_column += localMatrix[trIdx * MATRIX_SIZE + i] * fColumn[i] * mats[quadsInMatrix[i]].color;
-    }
+    buff[trIdx] = f_column * color;
+    memoryBarrierShared();
+    barrier();
 
     for (int i = 0; i < MATRIX_SIZE; ++i) {
-        g_row += localMatrix[i * MATRIX_SIZE + trIdx] * fRow[i] * mats[quadsInMatrix[i]].color;
+        g_column += localMatrix[trIdx * MATRIX_SIZE + i] * buff[i];
     }
+    memoryBarrierShared();
+    barrier();
 
+    buff[trIdx] = f_row * color;
+    memoryBarrierShared();
+    barrier();
+
+    for (int i = 0; i < MATRIX_SIZE; ++i) {
+        g_row += localMatrix[i * MATRIX_SIZE + trIdx] * buff[i];
+    }
+    memoryBarrierShared();
+    barrier();
 
     for (int i = 0; i < MATRIX_SIZE; ++i) {
         if (usedQuads[i] != 0) {

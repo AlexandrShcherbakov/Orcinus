@@ -44,6 +44,39 @@ public:
     }
 };
 
+struct Label {
+    std::chrono::microseconds minimum = std::chrono::microseconds::max(), maximum, sum;
+    int count;
+};
+static map<string, Label> timers;
+void printLabels() {
+    for (const auto& timer : timers) {
+        cout << timer.first << ": " << timer.second.sum.count() / static_cast<float>(timer.second.count) / 1000.0
+             << ' ' << timer.second.minimum.count() / 1000.0 << ' ' << timer.second.maximum.count() / 1000.0 << endl;
+    }
+}
+
+class LabeledTimer2 {
+    decltype(std::chrono::steady_clock::now()) start;
+    std::string label;
+public:
+    LabeledTimer2(const std::string& l) {
+        start = std::chrono::steady_clock::now();
+        label = l;
+    }
+    ~LabeledTimer2() {
+        auto end = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+//        if (elapsed.count() == 0) {
+//            return;
+//        }
+        timers[label].sum += elapsed;
+        timers[label].minimum = std::min(timers[label].minimum, elapsed);
+        timers[label].maximum = std::max(timers[label].maximum, elapsed);
+        timers[label].count++;
+    }
+};
+
 template<typename T>
 void writeBin(ofstream& out, const T t) {
     out.write(reinterpret_cast<const char*>(&t), sizeof(t));
@@ -597,16 +630,8 @@ class RadiosityProgram : public Hors::Program {
         return make_pair(idx, dist);
     }
 
-    void RemoveFromMatrix(const int idx) {
-        LabeledTimer timer("RemoveFromMatrix");
-        for (unsigned i = 0; i < dynamicMatrix.size(); ++i) {
-            dynamicMatrix[idx][i] = glm::vec3(0);
-            dynamicMatrix[i][idx] = glm::vec3(0);
-        }
-    }
-
     void AddToMatrix(const int idx, const unsigned place) {
-        LabeledTimer timer("AddToMatrix");
+        LabeledTimer2 timer("AddToMatrix");
 
         std::vector<glm::vec4> fRowToBuffer;
         std::vector<glm::vec4> fColumnToBuffer;
@@ -620,7 +645,7 @@ class RadiosityProgram : public Hors::Program {
 
         std::vector<int> usedToBuffer;
         usedToBuffer.reserve(Get<int>("MatrixSize"));
-        for (unsigned j = 0; j < Get<int>("MatrixSize"); ++j) {
+        for (int j = 0; j < Get<int>("MatrixSize"); ++j) {
             usedToBuffer.push_back(usedQuads[quadsInMatrix[j]][idx] ? 1 : 0);
         }
 
@@ -647,13 +672,13 @@ class RadiosityProgram : public Hors::Program {
     }
 
     void UpdateLightBuffer() {
-        LabeledTimer timer("UpdateLightBuffer");
+        LabeledTimer2 timer("UpdateLightBuffer");
         glUseProgram(updateLightCS); CHECK_GL_ERRORS;
         glDispatchCompute(Get<int>("MatrixSize") / 512, 1, 1);
     }
 
     void UpdateMatrixInfo(const int idx, const unsigned place) {
-        LabeledTimer timer("UpdateMatrixInfo");
+        LabeledTimer2 timer("UpdateMatrixInfo");
         usedQuads[quadsInMatrix[place]].assign(usedQuads[quadsInMatrix[place]].size(), false);
         for (unsigned i = 0; i < quadsInMatrix.size(); ++i) {
             if (i == place) {
@@ -664,17 +689,6 @@ class RadiosityProgram : public Hors::Program {
         }
         quadsInMatrix[place] = idx;
 
-//        vector<unsigned> flatUsedQuads(usedQuads.size() * usedQuads.size());
-//        for (unsigned i = 0; i < usedQuads.size(); ++i) {
-//            for (unsigned j = 0; j < usedQuads.size(); ++j) {
-//                flatUsedQuads[i * usedQuads.size() + j] = usedQuads[i][j];
-//            }
-//        }
-//
-//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *usedQuadsBuffer); CHECK_GL_ERRORS;
-//        glBufferData(GL_SHADER_STORAGE_BUFFER, flatUsedQuads.size() * sizeof(flatUsedQuads[0]), flatUsedQuads.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
-//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
-
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, *quadsInMatrixBuffer); CHECK_GL_ERRORS;
         glBufferData(GL_SHADER_STORAGE_BUFFER, quadsInMatrix.size() * sizeof(quadsInMatrix[0]), quadsInMatrix.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
@@ -683,21 +697,19 @@ class RadiosityProgram : public Hors::Program {
     void RecomputeLighting() {
         const auto includedDist = FarthestIncludedDistance();
         const auto excludedDist = NearestExcludedDistance();
-//        static int z = 0;
+        static int z = 0;
         if (excludedDist.second >= includedDist.second) {
-//            if (z) {
-//                cout << z << endl;
-//                z = 0;
-//
-//            }
+            if (z) {
+                printLabels();
+                z = 0;
+            }
             return;
         }
-//        z++;
-        LabeledTimer timer("RecomputeLighting");
-        RemoveFromMatrix(includedDist.first);
+        LabeledTimer2 timer("RecomputeLighting");
         AddToMatrix(excludedDist.first, includedDist.first);
         UpdateMatrixInfo(excludedDist.first, includedDist.first);
         UpdateLightBuffer();
+        ++z;
     }
 
     void ComputeQuadColors() {
@@ -864,4 +876,5 @@ public:
 
 int main(int argc, char** argv) {
     Hors::RunProgram<RadiosityProgram>(argc, argv);
+    printLabels();
 }
