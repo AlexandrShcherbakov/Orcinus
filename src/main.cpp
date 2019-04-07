@@ -607,84 +607,6 @@ class RadiosityProgram : public Hors::Program {
 
     void AddToMatrix(const int idx, const unsigned place) {
         LabeledTimer timer("AddToMatrix");
-//        Hors::SetUniform(addToMatrixCS, "index", idx);
-
-//        std::vector<glm::vec3> fColumn(dynamicMatrix.size(), glm::vec3(0));
-//        std::vector<glm::vec3> fRow(dynamicMatrix.size(), glm::vec3(0));
-//
-//        for (unsigned j = 0; j < place; ++j) {
-//            fColumn[j] = glm::vec3(hierarchicalFF[quadsInMatrix[j]][idx]);
-//            fRow[j] = glm::vec3(hierarchicalFF[idx][quadsInMatrix[j]]);
-//        }
-//        for (unsigned j = place - 1; j < fColumn.size(); ++j) {
-//            fColumn[j] = glm::vec3(hierarchicalFF[quadsInMatrix[j]][idx]);
-//            fRow[j] = glm::vec3(hierarchicalFF[idx][quadsInMatrix[j]]);
-//        }
-//        std::vector<glm::vec3> gColumn(fColumn), gRow(fRow);
-//        glm::vec3 doubleReflection(0);
-//        for (unsigned j = 0; j < fColumn.size(); ++j) {
-//            doubleReflection += fRow[j] * fColumn[j] * glm::vec3(quadsColors[quadsInMatrix[j]]);
-//        }
-//        doubleReflection *= glm::vec3(quadsColors[quadsInMatrix[place]]);
-//        for (unsigned j = 0; j < fColumn.size(); ++j) {
-//            gColumn[j] += fColumn[j] * doubleReflection;
-//            gRow[j] += fRow[j] * doubleReflection;
-//        }
-//        for (unsigned j = 0; j < fColumn.size(); ++j) {
-//            for (unsigned k = 0; k < fColumn.size(); ++k) {
-//                gColumn[j] += dynamicMatrix[j][k] * fColumn[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
-//            }
-//        }
-//        for (unsigned j = 0; j < fColumn.size(); ++j) {
-//            for (unsigned k = 0; k < fColumn.size(); ++k) {
-//                gRow[j] += dynamicMatrix[k][j] * fRow[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
-//            }
-//        }
-//        for (unsigned j = 0; j < fColumn.size(); ++j) {
-//            if (usedQuads[quadsInMatrix[j]][idx]) {
-//                continue;
-//            }
-//            for (unsigned k = 0; k < fRow.size(); ++k) {
-//                dynamicMatrix[j][k] += gColumn[j] * gRow[k] * glm::vec3(quadsColors[quadsInMatrix[place]]);
-//            }
-//        }
-//        for (unsigned j = 0; j < fColumn.size(); ++j) {
-//            dynamicMatrix[j][place] = gColumn[j];
-//            dynamicMatrix[place][j] = gRow[j];
-//        }
-//        dynamicMatrix[place][place] = glm::vec3(0);
-//        glm::vec3 value(0);
-//        for (unsigned k = 0; k < gColumn.size(); ++k) {
-//            value += gRow[k] * glm::vec3(quadsColors[quadsInMatrix[k]]);
-//        }
-//        glm::vec3 anotherValue(0);
-//        for (unsigned j = 0; j < gColumn.size(); ++j) {
-//            if (usedQuads[quadsInMatrix[j]][idx]) {
-//                continue;
-//            }
-//            anotherValue += gColumn[j];
-//        }
-//        dynamicMatrix[place][place] = anotherValue * value;
-
-//        std::vector<glm::vec4> flatDynamicMatrix;
-//        flatDynamicMatrix.reserve(Get<int>("MatrixSize") * Get<int>("MatrixSize"));
-//        for (const auto& row: dynamicMatrix) {
-//            for (const auto& value :row) {
-//                flatDynamicMatrix.push_back(glm::vec4(value, 1));
-//            }
-//        }
-
-//        std::vector<glm::vec4> gColumnToBuffer;
-//        gColumnToBuffer.reserve(Get<int>("MatrixSize"));
-//        for (const auto& value: gColumn) {
-//            gColumnToBuffer.push_back(glm::vec4(value, 1));
-//        }
-//
-//        std::vector<glm::vec4> gRowToBuffer;
-//        gRowToBuffer.reserve(Get<int>("MatrixSize"));
-//        for (const auto& value: gRow) {
-//            gRowToBuffer.push_back(glm::vec4(value, 1));
-//        }
 
         std::vector<glm::vec4> fRowToBuffer;
         std::vector<glm::vec4> fColumnToBuffer;
@@ -701,18 +623,6 @@ class RadiosityProgram : public Hors::Program {
         for (unsigned j = 0; j < Get<int>("MatrixSize"); ++j) {
             usedToBuffer.push_back(usedQuads[quadsInMatrix[j]][idx] ? 1 : 0);
         }
-
-//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *localMatrixBuffer); CHECK_GL_ERRORS;
-//        glBufferData(GL_SHADER_STORAGE_BUFFER, flatDynamicMatrix.size() * sizeof(flatDynamicMatrix[0]), flatDynamicMatrix.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
-//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
-
-//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *gColumnBuffer); CHECK_GL_ERRORS;
-//        glBufferData(GL_SHADER_STORAGE_BUFFER, gColumnToBuffer.size() * sizeof(gColumnToBuffer[0]), gColumnToBuffer.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
-//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
-//
-//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *gRowBuffer); CHECK_GL_ERRORS;
-//        glBufferData(GL_SHADER_STORAGE_BUFFER, gRowToBuffer.size() * sizeof(gRowToBuffer[0]), gRowToBuffer.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
-//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, *fRowBuffer); CHECK_GL_ERRORS;
         glBufferData(GL_SHADER_STORAGE_BUFFER, fRowToBuffer.size() * sizeof(fRowToBuffer[0]), fRowToBuffer.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
@@ -734,17 +644,6 @@ class RadiosityProgram : public Hors::Program {
 
         glDispatchCompute(Get<int>("MatrixSize") / 512, 1, 1);
         glFinish(); CHECK_GL_ERRORS;
-
-//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *localMatrixBuffer); CHECK_GL_ERRORS;
-//        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, flatDynamicMatrix.size() * sizeof(flatDynamicMatrix[0]), flatDynamicMatrix.data()); CHECK_GL_ERRORS;
-//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
-//        glFinish(); CHECK_GL_ERRORS;
-//
-//        for (int i = 0; i < Get<int>("MatrixSize"); ++i) {
-//            for (int j = 0; j < Get<int>("MatrixSize"); ++j) {
-//                dynamicMatrix[i][j] = flatDynamicMatrix[i * Get<int>("MatrixSize") + j];
-//            }
-//        }
     }
 
     void UpdateLightBuffer() {
