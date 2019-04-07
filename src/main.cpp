@@ -666,13 +666,13 @@ class RadiosityProgram : public Hors::Program {
 //        }
 //        dynamicMatrix[place][place] = anotherValue * value;
 
-        std::vector<glm::vec4> flatDynamicMatrix;
-        flatDynamicMatrix.reserve(Get<int>("MatrixSize") * Get<int>("MatrixSize"));
-        for (const auto& row: dynamicMatrix) {
-            for (const auto& value :row) {
-                flatDynamicMatrix.push_back(glm::vec4(value, 1));
-            }
-        }
+//        std::vector<glm::vec4> flatDynamicMatrix;
+//        flatDynamicMatrix.reserve(Get<int>("MatrixSize") * Get<int>("MatrixSize"));
+//        for (const auto& row: dynamicMatrix) {
+//            for (const auto& value :row) {
+//                flatDynamicMatrix.push_back(glm::vec4(value, 1));
+//            }
+//        }
 
 //        std::vector<glm::vec4> gColumnToBuffer;
 //        gColumnToBuffer.reserve(Get<int>("MatrixSize"));
@@ -702,9 +702,9 @@ class RadiosityProgram : public Hors::Program {
             usedToBuffer.push_back(usedQuads[quadsInMatrix[j]][idx] ? 1 : 0);
         }
 
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *localMatrixBuffer); CHECK_GL_ERRORS;
-        glBufferData(GL_SHADER_STORAGE_BUFFER, flatDynamicMatrix.size() * sizeof(flatDynamicMatrix[0]), flatDynamicMatrix.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *localMatrixBuffer); CHECK_GL_ERRORS;
+//        glBufferData(GL_SHADER_STORAGE_BUFFER, flatDynamicMatrix.size() * sizeof(flatDynamicMatrix[0]), flatDynamicMatrix.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
+//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
 
 //        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *gColumnBuffer); CHECK_GL_ERRORS;
 //        glBufferData(GL_SHADER_STORAGE_BUFFER, gColumnToBuffer.size() * sizeof(gColumnToBuffer[0]), gColumnToBuffer.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
@@ -735,16 +735,16 @@ class RadiosityProgram : public Hors::Program {
         glDispatchCompute(Get<int>("MatrixSize") / 512, 1, 1);
         glFinish(); CHECK_GL_ERRORS;
 
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *localMatrixBuffer); CHECK_GL_ERRORS;
-        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, flatDynamicMatrix.size() * sizeof(flatDynamicMatrix[0]), flatDynamicMatrix.data()); CHECK_GL_ERRORS;
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
-        glFinish(); CHECK_GL_ERRORS;
-
-        for (int i = 0; i < Get<int>("MatrixSize"); ++i) {
-            for (int j = 0; j < Get<int>("MatrixSize"); ++j) {
-                dynamicMatrix[i][j] = flatDynamicMatrix[i * Get<int>("MatrixSize") + j];
-            }
-        }
+//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *localMatrixBuffer); CHECK_GL_ERRORS;
+//        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, flatDynamicMatrix.size() * sizeof(flatDynamicMatrix[0]), flatDynamicMatrix.data()); CHECK_GL_ERRORS;
+//        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+//        glFinish(); CHECK_GL_ERRORS;
+//
+//        for (int i = 0; i < Get<int>("MatrixSize"); ++i) {
+//            for (int j = 0; j < Get<int>("MatrixSize"); ++j) {
+//                dynamicMatrix[i][j] = flatDynamicMatrix[i * Get<int>("MatrixSize") + j];
+//            }
+//        }
     }
 
     void UpdateLightBuffer() {
