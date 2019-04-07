@@ -609,17 +609,17 @@ class RadiosityProgram : public Hors::Program {
         LabeledTimer timer("AddToMatrix");
 //        Hors::SetUniform(addToMatrixCS, "index", idx);
 
-        std::vector<glm::vec3> fColumn(dynamicMatrix.size(), glm::vec3(0));
-        std::vector<glm::vec3> fRow(dynamicMatrix.size(), glm::vec3(0));
-
-        for (unsigned j = 0; j < place; ++j) {
-            fColumn[j] = glm::vec3(hierarchicalFF[quadsInMatrix[j]][idx]);
-            fRow[j] = glm::vec3(hierarchicalFF[idx][quadsInMatrix[j]]);
-        }
-        for (unsigned j = place - 1; j < fColumn.size(); ++j) {
-            fColumn[j] = glm::vec3(hierarchicalFF[quadsInMatrix[j]][idx]);
-            fRow[j] = glm::vec3(hierarchicalFF[idx][quadsInMatrix[j]]);
-        }
+//        std::vector<glm::vec3> fColumn(dynamicMatrix.size(), glm::vec3(0));
+//        std::vector<glm::vec3> fRow(dynamicMatrix.size(), glm::vec3(0));
+//
+//        for (unsigned j = 0; j < place; ++j) {
+//            fColumn[j] = glm::vec3(hierarchicalFF[quadsInMatrix[j]][idx]);
+//            fRow[j] = glm::vec3(hierarchicalFF[idx][quadsInMatrix[j]]);
+//        }
+//        for (unsigned j = place - 1; j < fColumn.size(); ++j) {
+//            fColumn[j] = glm::vec3(hierarchicalFF[quadsInMatrix[j]][idx]);
+//            fRow[j] = glm::vec3(hierarchicalFF[idx][quadsInMatrix[j]]);
+//        }
 //        std::vector<glm::vec3> gColumn(fColumn), gRow(fRow);
 //        glm::vec3 doubleReflection(0);
 //        for (unsigned j = 0; j < fColumn.size(); ++j) {
@@ -687,20 +687,18 @@ class RadiosityProgram : public Hors::Program {
 //        }
 
         std::vector<glm::vec4> fRowToBuffer;
-        fRowToBuffer.reserve(Get<int>("MatrixSize"));
-        for (const auto& value: fRow) {
-            fRowToBuffer.push_back(glm::vec4(value, 1));
-        }
-
         std::vector<glm::vec4> fColumnToBuffer;
+        fRowToBuffer.reserve(Get<int>("MatrixSize"));
         fColumnToBuffer.reserve(Get<int>("MatrixSize"));
-        for (const auto& value: fColumn) {
-            fColumnToBuffer.push_back(glm::vec4(value, 1));
+
+        for (int j = 0; j < Get<int>("MatrixSize"); ++j) {
+            fColumnToBuffer.push_back(glm::vec4(hierarchicalFF[quadsInMatrix[j]][idx]));
+            fRowToBuffer.push_back(glm::vec4(hierarchicalFF[idx][quadsInMatrix[j]]));
         }
 
         std::vector<int> usedToBuffer;
         usedToBuffer.reserve(Get<int>("MatrixSize"));
-        for (unsigned j = 0; j < fColumn.size(); ++j) {
+        for (unsigned j = 0; j < Get<int>("MatrixSize"); ++j) {
             usedToBuffer.push_back(usedQuads[quadsInMatrix[j]][idx] ? 1 : 0);
         }
 
