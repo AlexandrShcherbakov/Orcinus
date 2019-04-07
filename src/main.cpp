@@ -621,11 +621,11 @@ class RadiosityProgram : public Hors::Program {
             fRow[j] = glm::vec3(hierarchicalFF[idx][quadsInMatrix[j]]);
         }
         std::vector<glm::vec3> gColumn(fColumn), gRow(fRow);
-        glm::vec3 doubleReflection(0);
-        for (unsigned j = 0; j < fColumn.size(); ++j) {
-            doubleReflection += fRow[j] * fColumn[j] * glm::vec3(quadsColors[quadsInMatrix[j]]);
-        }
-        doubleReflection *= glm::vec3(quadsColors[quadsInMatrix[place]]);
+//        glm::vec3 doubleReflection(0);
+//        for (unsigned j = 0; j < fColumn.size(); ++j) {
+//            doubleReflection += fRow[j] * fColumn[j] * glm::vec3(quadsColors[quadsInMatrix[j]]);
+//        }
+//        doubleReflection *= glm::vec3(quadsColors[quadsInMatrix[place]]);
 //        for (unsigned j = 0; j < fColumn.size(); ++j) {
 //            gColumn[j] += fColumn[j] * doubleReflection;
 //            gRow[j] += fRow[j] * doubleReflection;
@@ -731,8 +731,6 @@ class RadiosityProgram : public Hors::Program {
         glFlush(); CHECK_GL_ERRORS;
 
         Hors::SetUniform(addToMatrixCS, "place", place);
-
-        Hors::SetUniform(addToMatrixCS, "doubleReflection", glm::vec4(doubleReflection, 0));
 
         glUseProgram(addToMatrixCS); CHECK_GL_ERRORS;
 
