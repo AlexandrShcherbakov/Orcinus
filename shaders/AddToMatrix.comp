@@ -30,16 +30,16 @@ layout(std430, binding = 3) buffer layoutName4
 };
 
 
-layout(std430, binding = 4) buffer layoutName5
-{
-    vec4 gColumn[];
-};
-
-
-layout(std430, binding = 5) buffer layoutName6
-{
-    vec4 gRow[];
-};
+//layout(std430, binding = 4) buffer layoutName5
+//{
+//    vec4 gColumn[];
+//};
+//
+//
+//layout(std430, binding = 5) buffer layoutName6
+//{
+//    vec4 gRow[];
+//};
 
 layout(std430, binding = 6) buffer layoutName7
 {
@@ -65,8 +65,8 @@ void main() {
     vec4 f_column = fColumn[trIdx];
     vec4 f_row = fRow[trIdx];
     vec4 color = mats[idx].color;
-    vec4 g_column = gColumn[trIdx];
-    vec4 g_row = gRow[trIdx];
+    vec4 g_column = fColumn[trIdx];
+    vec4 g_row = fRow[trIdx];
     vec4 placeColor = mats[quadsInMatrix[place]].color;
 
     buff[trIdx] = f_column * f_row * color;
