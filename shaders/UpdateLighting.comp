@@ -1,6 +1,7 @@
 #version 450
 
 uniform int dynamicMatrixSize;
+const int MATRIX_SIZE = 1024;
 
 layout(std430, binding = 0) buffer layoutName1
 {
@@ -28,12 +29,12 @@ layout(std430, binding = 3) buffer layoutName4
     material mats[];
 };
 
-layout(local_size_x = 512, local_size_y = 1) in;
+layout(local_size_x = MATRIX_SIZE, local_size_y = 1) in;
 void main() {
     uint globalIdx = quadsInMatrix[gl_GlobalInvocationID.x];
     vec4 lighting = vec4(0, 0, 0, 0);
-    for (int i = 0; i < dynamicMatrixSize; ++i) {
-        lighting += mats[quadsInMatrix[i]].emission * localMatrix[gl_GlobalInvocationID.x * dynamicMatrixSize + i];
+    for (int i = 0; i < MATRIX_SIZE; ++i) {
+        lighting += mats[quadsInMatrix[i]].emission * localMatrix[gl_GlobalInvocationID.x * MATRIX_SIZE + i];
     }
 //    lighting *= mats[globalIdx].color;
 //    lighting += mats[globalIdx].emission;

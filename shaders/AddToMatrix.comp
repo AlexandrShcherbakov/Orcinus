@@ -3,7 +3,7 @@
 uniform int dynamicMatrixSize;
 uniform int place;
 
-const int MATRIX_SIZE = 512;
+const int MATRIX_SIZE = 1024;
 
 shared vec4 buff[MATRIX_SIZE];
 shared vec4 buff2[MATRIX_SIZE];

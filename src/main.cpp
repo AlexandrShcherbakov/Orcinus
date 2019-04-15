@@ -113,6 +113,8 @@ class RadiosityProgram : public Hors::Program {
     Hors::GLBuffer materialsBuffer;
     Hors::GLBuffer usedQuadsBuffer;
     Hors::GLBuffer fColumnBuffer, fRowBuffer;
+    std::vector<int> quadsOrder;
+    glm::vec3 lastPos;
 
     std::vector<glm::vec4> quadsColors;
 
@@ -579,6 +581,7 @@ class RadiosityProgram : public Hors::Program {
     }
 
     std::pair<int, float> FarthestIncludedDistance() {
+        LabeledTimer2 timer("FindToExclude");
         float dist = 0;
         int idx = 0;
         for (unsigned i = 0; i < quadsInMatrix.size(); ++i) {
@@ -595,6 +598,10 @@ class RadiosityProgram : public Hors::Program {
     }
 
     pair<int, float> NearestExcludedDistance() {
+        LabeledTimer2 timer("FindToInclude");
+        int ret = quadsOrder[0];
+        quadsOrder.erase(quadsOrder.begin());
+        return make_pair(ret, glm::distance(quadCenters[ret], MainCamera.GetPosition()));
         float dist = 1e6;
         int idx = 0;
         for (unsigned i = 0; i < quadCenters.size(); ++i) {
@@ -629,6 +636,10 @@ class RadiosityProgram : public Hors::Program {
             usedToBuffer.push_back(usedQuads[quadsInMatrix[j]][idx] ? 1 : 0);
         }
 
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *quadsInMatrixBuffer); CHECK_GL_ERRORS;
+        glBufferSubData(GL_SHADER_STORAGE_BUFFER, place * sizeof(idx), sizeof(idx), &idx); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, *fRowBuffer); CHECK_GL_ERRORS;
         glBufferData(GL_SHADER_STORAGE_BUFFER, fRowToBuffer.size() * sizeof(fRowToBuffer[0]), fRowToBuffer.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
@@ -647,14 +658,14 @@ class RadiosityProgram : public Hors::Program {
 
         glUseProgram(addToMatrixCS); CHECK_GL_ERRORS;
 
-        glDispatchCompute(Get<int>("MatrixSize") / 512, 1, 1);
+        glDispatchCompute(1, 1, 1);
         glFinish(); CHECK_GL_ERRORS;
     }
 
     void UpdateLightBuffer() {
         LabeledTimer2 timer("UpdateLightBuffer");
         glUseProgram(updateLightCS); CHECK_GL_ERRORS;
-        glDispatchCompute(Get<int>("MatrixSize") / 512, 1, 1);
+        glDispatchCompute(1, 1, 1);
     }
 
     void UpdateMatrixInfo(const int idx, const unsigned place) {
@@ -668,15 +679,15 @@ class RadiosityProgram : public Hors::Program {
             usedQuads[idx][quadsInMatrix[i]] = true;
         }
         quadsInMatrix[place] = idx;
-
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *quadsInMatrixBuffer); CHECK_GL_ERRORS;
-        glBufferData(GL_SHADER_STORAGE_BUFFER, quadsInMatrix.size() * sizeof(quadsInMatrix[0]), quadsInMatrix.data(), GL_STATIC_DRAW); CHECK_GL_ERRORS;
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
     }
 
     void RecomputeLighting() {
+        if (glm::length(lastPos - MainCamera.GetPosition()) > 1e-5) {
+            updateQuadsOrder();
+        }
         const auto includedDist = FarthestIncludedDistance();
         const auto excludedDist = NearestExcludedDistance();
+        lastPos = MainCamera.GetPosition();
         static int z = 0;
         if (excludedDist.second >= includedDist.second) {
             if (z) {
@@ -725,6 +736,25 @@ class RadiosityProgram : public Hors::Program {
             texColor /= (bottom - top) * (right - left);
             quadsColors.back() *= texColor;
         }
+    }
+
+    void updateQuadsOrder() {
+        quadsOrder.resize(hierarchicalFF.size());
+        for (unsigned int i = 0; i < quadsOrder.size(); ++i) {
+            quadsOrder[i] = i;
+        }
+
+        std::sort(quadsOrder.begin(), quadsOrder.end(), [this](int i, int j){
+            float inMatrixCorrectionI = 0;
+            float inMatrixCorrectionJ = 0;
+            if (std::find(quadsInMatrix.begin(), quadsInMatrix.end(), i) != quadsInMatrix.end()) {
+                inMatrixCorrectionI = 1e10;
+            }
+            if (std::find(quadsInMatrix.begin(), quadsInMatrix.end(), j) != quadsInMatrix.end()) {
+                inMatrixCorrectionJ = 1e10;
+            }
+            return glm::distance(quadCenters[i], MainCamera.GetPosition()) + inMatrixCorrectionI < glm::distance(quadCenters[j], MainCamera.GetPosition()) + inMatrixCorrectionJ;
+        });
     }
 
 
@@ -788,7 +818,7 @@ public:
         ComputeQuadColors();
 
         lighting.assign(static_cast<unsigned long>(quadsHierarchy.GetSize()), glm::vec4(0));
-        computeIndirectLighting(3);
+//        computeIndirectLighting(3);
 
         quadsInMatrix.resize(static_cast<unsigned long>(quadsHierarchy.GetSize()));
         for (unsigned i = 0; i < quadsInMatrix.size(); ++i) {
@@ -803,6 +833,8 @@ public:
         quadsInMatrix.resize(Get<int>("MatrixSize"));
 
         PrepareBuffers();
+        quadsOrder.resize(hierarchicalFF.size());
+        updateQuadsOrder();
 
         InitDynamicMatrix();
         usedQuads.resize(static_cast<unsigned long>(quadsHierarchy.GetSize()));
@@ -834,6 +866,22 @@ public:
         AddKeyboardEvent('p', [this](){ std::cout << MainCamera.GetPosition().x << ' ' << MainCamera.GetPosition().y << ' ' << MainCamera.GetPosition().z << std::endl; });
         AddKeyboardEvent('m', [this](){
             MainCamera.SetPosition(glm::vec3(-0.207217, 0.356178, -0.0529972));
+        });
+        AddKeyboardEvent('l', [this](){
+            int z = 0;
+            for (unsigned int i = 0; i < hierarchicalFF.size(); ++i) {
+                const int matId = quadsHierarchy.GetQuad(i).GetMaterialId();
+                if (glm::distance(quadCenters[i], MainCamera.GetPosition()) < glm::distance(quadCenters[z], MainCamera.GetPosition()) && materialsEmission[matId].x > 1e-5) {
+                    z = i;
+                }
+            }
+            cout << z << endl;
+            glm::vec4 randColor((float)rand() / (1 << 16), (float)rand() / (1 << 16), (float)rand() / (1 << 16), 1);
+            randColor *= 10;
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, *materialsBuffer); CHECK_GL_ERRORS;
+            glBufferSubData(GL_SHADER_STORAGE_BUFFER, (2 * z + 1) * sizeof(randColor), sizeof(randColor), &randColor); CHECK_GL_ERRORS;
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+            UpdateLightBuffer();
         });
     }
 

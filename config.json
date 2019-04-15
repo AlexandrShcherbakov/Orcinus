@@ -11,5 +11,5 @@
   "MaxHierarchyDepth": 1,
   "FormFactorsDir": "FF",
   "Bounces": 5,
-  "MatrixSize": 512
+  "MatrixSize": 1024
 }
