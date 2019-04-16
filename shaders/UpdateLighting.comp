@@ -8,11 +8,6 @@ layout(std430, binding = 0) buffer layoutName1
     vec4 indirect_light[];
 };
 
-layout(std430, binding = 1) buffer layoutName2
-{
-    vec4 localMatrix[];
-};
-
 layout(std430, binding = 2) buffer layoutName3
 {
     uint quadsInMatrix[];
@@ -30,13 +25,12 @@ layout(std430, binding = 3) buffer layoutName4
 };
 
 layout(local_size_x = MATRIX_SIZE, local_size_y = 1) in;
+layout (location = 0, rgba16f) uniform image2D localMatrixTex;
 void main() {
     uint globalIdx = quadsInMatrix[gl_GlobalInvocationID.x];
     vec4 lighting = vec4(0, 0, 0, 0);
     for (int i = 0; i < MATRIX_SIZE; ++i) {
-        lighting += mats[quadsInMatrix[i]].emission * localMatrix[gl_GlobalInvocationID.x * MATRIX_SIZE + i];
+        lighting += mats[quadsInMatrix[i]].emission * imageLoad(localMatrixTex, ivec2(gl_GlobalInvocationID.x, i));
     }
-//    lighting *= mats[globalIdx].color;
-//    lighting += mats[globalIdx].emission;
     indirect_light[globalIdx] = lighting;
 }

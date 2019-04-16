@@ -8,11 +8,6 @@ const int MATRIX_SIZE = 1024;
 shared vec4 buff[MATRIX_SIZE];
 shared vec4 buff2[MATRIX_SIZE];
 
-layout(std430, binding = 1) buffer layoutName2
-{
-    vec4 localMatrix[];
-};
-
 layout(std430, binding = 2) buffer layoutName3
 {
     uint quadsInMatrix[];
@@ -46,6 +41,7 @@ layout(std430, binding = 6) buffer layoutName9
 
 
 layout(local_size_x = MATRIX_SIZE, local_size_y = 1) in;
+layout(location = 0, rgba16f) uniform image2D localMatrixTex;
 void main() {
     uint trIdx = gl_GlobalInvocationID.x;
 
@@ -57,8 +53,8 @@ void main() {
     vec4 g_row = fRow[trIdx];
     vec4 placeColor = mats[quadsInMatrix[place]].color;
 
-    localMatrix[place * MATRIX_SIZE + trIdx] = vec4(0);
-    localMatrix[trIdx * MATRIX_SIZE + place] = vec4(0);
+    imageStore(localMatrixTex, ivec2(place, trIdx), vec4(0, 0, 0, 0));
+    imageStore(localMatrixTex, ivec2(trIdx, place), vec4(0, 0, 0, 0));
 
     buff[trIdx] = f_column * f_row * color;
     memoryBarrierShared();
@@ -85,7 +81,7 @@ void main() {
     barrier();
 
     for (int i = 0; i < MATRIX_SIZE; ++i) {
-        g_column += localMatrix[trIdx * MATRIX_SIZE + i] * buff[i];
+        g_column += imageLoad(localMatrixTex, ivec2(trIdx, i)) * buff[i];
     }
     memoryBarrierShared();
     barrier();
@@ -95,7 +91,7 @@ void main() {
     barrier();
 
     for (int i = 0; i < MATRIX_SIZE; ++i) {
-        g_row += localMatrix[i * MATRIX_SIZE + trIdx] * buff[i];
+        g_row += imageLoad(localMatrixTex, ivec2(i, trIdx)) * buff[i];
     }
     memoryBarrierShared();
     barrier();
@@ -109,7 +105,7 @@ void main() {
         }
         memoryBarrierShared();
         barrier();
-        localMatrix[i * MATRIX_SIZE + trIdx] += g_row * buff[0];
+        imageStore(localMatrixTex, ivec2(i, trIdx), imageLoad(localMatrixTex, ivec2(i, trIdx)) + vec4(0, 0, 0, 0));
         memoryBarrierShared();
         barrier();
     }
@@ -117,8 +113,8 @@ void main() {
     buff[trIdx] = g_row * color;
     buff2[trIdx] = (usedQuads[trIdx] != 0) ? vec4(0) : g_column;
 
-    localMatrix[place * MATRIX_SIZE + trIdx] = g_row;
-    localMatrix[trIdx * MATRIX_SIZE + place] = g_column;
+    imageStore(localMatrixTex, ivec2(place, trIdx), g_row);
+    imageStore(localMatrixTex, ivec2(trIdx, place), g_column);
 
     memoryBarrierShared();
     barrier();
@@ -133,6 +129,6 @@ void main() {
     }
 
     if (trIdx == 0) {
-        localMatrix[place * MATRIX_SIZE + place] = buff[0] * buff2[0];
+        imageStore(localMatrixTex, ivec2(place, place), buff[0] * buff2[0]);
     }
 }
