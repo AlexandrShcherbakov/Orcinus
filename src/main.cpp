@@ -741,10 +741,10 @@ class RadiosityProgram : public Hors::Program {
         std::sort(quadsOrder.begin(), quadsOrder.end(), [this](int i, int j){
             float inMatrixCorrectionI = 0;
             float inMatrixCorrectionJ = 0;
-            if (std::find(quadsInMatrix.begin(), quadsInMatrix.end(), i) != quadsInMatrix.end()) {
+            if (quadCenters[i].y < 0.3  || std::find(quadsInMatrix.begin(), quadsInMatrix.end(), i) != quadsInMatrix.end()) {
                 inMatrixCorrectionI = 1e10;
             }
-            if (std::find(quadsInMatrix.begin(), quadsInMatrix.end(), j) != quadsInMatrix.end()) {
+            if (quadCenters[j].y < 0.3 || std::find(quadsInMatrix.begin(), quadsInMatrix.end(), j) != quadsInMatrix.end()) {
                 inMatrixCorrectionJ = 1e10;
             }
             return glm::distance(quadCenters[i], MainCamera.GetPosition()) + inMatrixCorrectionI < glm::distance(quadCenters[j], MainCamera.GetPosition()) + inMatrixCorrectionJ;
