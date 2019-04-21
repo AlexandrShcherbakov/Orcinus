@@ -1,0 +1,40 @@
+#version 450
+
+const int THREADS_COUNT = 1024;
+
+const int MATRIX_SIZE = 1024;
+
+layout(std430, binding = 5) buffer layoutName8
+{
+    vec4 fRow[];
+};
+
+layout(std430, binding = 6) buffer layoutName9
+{
+    vec4 fColumn[];
+};
+
+layout(std430, binding = 7) buffer layoutName10
+{
+    vec4 doubleReflection;
+};
+
+layout(std430, binding = 8) buffer layoutName11
+{
+    vec4 gRow[];
+};
+
+layout(std430, binding = 9) buffer layoutName12
+{
+    vec4 gColumn[];
+};
+
+
+layout(local_size_x = THREADS_COUNT) in;
+layout(location = 0, rgba16f) uniform image2D localMatrixTex;
+void main() {
+    uint trIdx = gl_GlobalInvocationID.x;
+
+    gRow[trIdx] = fRow[trIdx] * (doubleReflection + 1);
+    gColumn[trIdx] = fColumn[trIdx] * (doubleReflection + 1);
+}

@@ -94,6 +94,7 @@ class RadiosityProgram : public Hors::Program {
     GLuint addToMatrixCS;
     GLuint removeOldValuesCS;
     GLuint computeDoubleReflectionCS;
+    GLuint computeTripleReflectionCS;
     std::vector<glm::vec4> perQuadPositions, perQuadColors;
     std::vector<unsigned> renderedQuads;
     std::vector<glm::vec4> materialsEmission;
@@ -385,7 +386,40 @@ class RadiosityProgram : public Hors::Program {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, *doubelReflection); CHECK_GL_ERRORS;
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
 
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *gRowBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, *gRowBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *gColumnBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 9, *gColumnBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
         glBindImageTexture(0, localMatrixTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA16F); CHECK_GL_ERRORS;
+
+        computeTripleReflectionCS = Hors::CompileComputeShaderProgram(
+                Hors::ReadAndCompileShader("shaders/ComputeTripleReflection.comp", GL_COMPUTE_SHADER)
+        );
+        glUseProgram(computeTripleReflectionCS); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *fRowBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, *fRowBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *fColumnBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, *fColumnBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *doubelReflection); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, *doubelReflection); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *gRowBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, *gRowBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *gColumnBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 9, *gColumnBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
     }
 
     void computeIndirectLighting(const unsigned bouncesCount) {
@@ -704,6 +738,17 @@ class RadiosityProgram : public Hors::Program {
             Hors::SetUniform(computeDoubleReflectionCS, "place", place);
 
             glUseProgram(computeDoubleReflectionCS); CHECK_GL_ERRORS;
+
+            glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
+            glDispatchCompute(1, 1, 1); CHECK_GL_ERRORS;
+            glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
+        }
+
+        {
+            LabeledTimer2 timer("TripleReflection");
+//            Hors::SetUniform(computeTripleReflectionCS, "place", place);
+
+            glUseProgram(computeTripleReflectionCS); CHECK_GL_ERRORS;
 
             glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
             glDispatchCompute(1, 1, 1); CHECK_GL_ERRORS;

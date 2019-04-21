@@ -44,6 +44,16 @@ layout(std430, binding = 7) buffer layoutName10
     vec4 doubleReflection;
 };
 
+layout(std430, binding = 8) buffer layoutName11
+{
+    vec4 gRow[];
+};
+
+layout(std430, binding = 9) buffer layoutName12
+{
+    vec4 gColumn[];
+};
+
 
 layout(local_size_x = MATRIX_SIZE, local_size_y = 1) in;
 layout(location = 0, rgba16f) uniform image2D localMatrixTex;
@@ -54,8 +64,8 @@ void main() {
     vec4 f_column = fColumn[trIdx];
     vec4 f_row = fRow[trIdx];
     vec4 color = mats[idx].color;
-    vec4 g_column = fColumn[trIdx];
-    vec4 g_row = fRow[trIdx];
+    vec4 g_column = gColumn[trIdx];
+    vec4 g_row = gRow[trIdx];
     vec4 placeColor = mats[quadsInMatrix[place]].color;
 
 //    imageStore(localMatrixTex, ivec2(place, trIdx), vec4(0, 0, 0, 0));
@@ -78,8 +88,8 @@ void main() {
 //    memoryBarrierShared();
 //    barrier();
 
-    g_column += f_column * doubleReflection;
-    g_row += f_row * doubleReflection;
+//    g_column += f_column * doubleReflection;
+//    g_row += f_row * doubleReflection;
 
     buff[trIdx] = f_column * color;
     memoryBarrierShared();
