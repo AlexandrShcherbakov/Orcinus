@@ -92,6 +92,7 @@ class RadiosityProgram : public Hors::Program {
     GLuint QuadRender;
     GLuint updateLightCS;
     GLuint addToMatrixCS;
+    GLuint removeOldValuesCS;
     std::vector<glm::vec4> perQuadPositions, perQuadColors;
     std::vector<unsigned> renderedQuads;
     std::vector<glm::vec4> materialsEmission;
@@ -315,10 +316,16 @@ class RadiosityProgram : public Hors::Program {
 
         usedQuadsBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(std::vector<int>(Get<int>("MatrixSize")));
 
+        removeOldValuesCS = Hors::CompileComputeShaderProgram(
+                Hors::ReadAndCompileShader("shaders/RemoveOldValues.comp", GL_COMPUTE_SHADER)
+        );
+        glUseProgram(removeOldValuesCS); CHECK_GL_ERRORS;
+
+        glBindImageTexture(0, localMatrixTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA16F); CHECK_GL_ERRORS;
+
         addToMatrixCS = Hors::CompileComputeShaderProgram(
                 Hors::ReadAndCompileShader("shaders/AddToMatrix.comp", GL_COMPUTE_SHADER)
         );
-        cout << addToMatrixCS << endl;
         glUseProgram(addToMatrixCS); CHECK_GL_ERRORS;
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, *quadsInMatrixBuffer); CHECK_GL_ERRORS;
@@ -644,13 +651,27 @@ class RadiosityProgram : public Hors::Program {
 
         glFlush(); CHECK_GL_ERRORS;
 
-        Hors::SetUniform(addToMatrixCS, "place", place);
+        {
+            Hors::SetUniform(removeOldValuesCS, "place", place);
 
-        glUseProgram(addToMatrixCS); CHECK_GL_ERRORS;
+            glUseProgram(removeOldValuesCS);
+            CHECK_GL_ERRORS;
 
-        glMemoryBarrier(GL_ALL_BARRIER_BITS);
-        glDispatchCompute(1, 1, 1);
-        glMemoryBarrier(GL_ALL_BARRIER_BITS);
+            glMemoryBarrier(GL_ALL_BARRIER_BITS);
+            glDispatchCompute(Get<int>("MatrixSize") / 1024, 1, 1);
+            glMemoryBarrier(GL_ALL_BARRIER_BITS);
+        }
+
+        {
+            Hors::SetUniform(addToMatrixCS, "place", place);
+
+            glUseProgram(addToMatrixCS);
+            CHECK_GL_ERRORS;
+
+            glMemoryBarrier(GL_ALL_BARRIER_BITS);
+            glDispatchCompute(1, 1, 1);
+            glMemoryBarrier(GL_ALL_BARRIER_BITS);
+        }
         glFinish(); CHECK_GL_ERRORS;
     }
 

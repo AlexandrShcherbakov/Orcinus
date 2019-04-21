@@ -123,7 +123,7 @@ public:
             normal = glm::vec4(glm::cross(glm::vec3(Vertices[1].GetPoint() - Vertices[0].GetPoint()),
                                           glm::vec3(Vertices[3].GetPoint() - Vertices[0].GetPoint())), 0);
         }
-        normal = glm::normalize(normal);
+//        normal = glm::vec4(glm::normalize(glm::vec3(a.GetNormal())), 0);
     }
 
     std::array<ModelVertex, 4> GetVertices() const {

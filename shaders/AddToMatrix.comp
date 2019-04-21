@@ -53,8 +53,8 @@ void main() {
     vec4 g_row = fRow[trIdx];
     vec4 placeColor = mats[quadsInMatrix[place]].color;
 
-    imageStore(localMatrixTex, ivec2(place, trIdx), vec4(0, 0, 0, 0));
-    imageStore(localMatrixTex, ivec2(trIdx, place), vec4(0, 0, 0, 0));
+//    imageStore(localMatrixTex, ivec2(place, trIdx), vec4(0, 0, 0, 0));
+//    imageStore(localMatrixTex, ivec2(trIdx, place), vec4(0, 0, 0, 0));
 
     buff[trIdx] = f_column * f_row * color;
     memoryBarrierShared();
