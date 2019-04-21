@@ -1,0 +1,82 @@
+#version 450
+
+const int THREADS_COUNT = 512;
+
+uniform int place;
+
+const int MATRIX_SIZE = 1024;
+
+shared vec4 buff[THREADS_COUNT];
+
+layout(std430, binding = 2) buffer layoutName3
+{
+    uint quadsInMatrix[];
+};
+
+struct material
+{
+    vec4 color;
+    vec4 emission;
+};
+
+layout(std430, binding = 3) buffer layoutName4
+{
+    material mats[];
+};
+
+layout(std430, binding = 4) buffer layoutName7
+{
+    int usedQuads[];
+};
+
+layout(std430, binding = 5) buffer layoutName8
+{
+    vec4 fRow[];
+};
+
+layout(std430, binding = 6) buffer layoutName9
+{
+    vec4 fColumn[];
+};
+
+layout(std430, binding = 7) buffer layoutName10
+{
+    vec4 doubleReflection;
+};
+
+
+layout(local_size_x = THREADS_COUNT) in;
+layout(location = 0, rgba16f) uniform image2D localMatrixTex;
+void main() {
+    uint trIdx = gl_GlobalInvocationID.x;
+
+    uint idx = quadsInMatrix[trIdx];
+    vec4 f_column = fColumn[trIdx];
+    vec4 f_row = fRow[trIdx];
+    vec4 color = mats[idx].color;
+    vec4 g_column = fColumn[trIdx];
+    vec4 g_row = fRow[trIdx];
+    vec4 placeColor = mats[quadsInMatrix[place]].color;
+
+    buff[trIdx] = fColumn[trIdx] * fRow[trIdx] * mats[idx].color + fColumn[trIdx + MATRIX_SIZE / 2] * fRow[trIdx + MATRIX_SIZE / 2] * mats[quadsInMatrix[trIdx + MATRIX_SIZE / 2]].color;
+    memoryBarrierShared();
+    barrier();
+
+    for (int i = MATRIX_SIZE / 4; i > 32; i >>= 1) {
+        if (trIdx < i) {
+            buff[trIdx] += buff[i + trIdx];
+        }
+        memoryBarrierShared();
+        barrier();
+    }
+
+    for (int i = 32; i > 0; i >>= 1) {
+        if (trIdx < i) {
+            buff[trIdx] += buff[i + trIdx];
+        }
+    }
+
+    if (trIdx == 0) {
+        doubleReflection = buff[0] * placeColor;
+    }
+}

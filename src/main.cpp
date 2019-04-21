@@ -93,6 +93,7 @@ class RadiosityProgram : public Hors::Program {
     GLuint updateLightCS;
     GLuint addToMatrixCS;
     GLuint removeOldValuesCS;
+    GLuint computeDoubleReflectionCS;
     std::vector<glm::vec4> perQuadPositions, perQuadColors;
     std::vector<unsigned> renderedQuads;
     std::vector<glm::vec4> materialsEmission;
@@ -113,6 +114,8 @@ class RadiosityProgram : public Hors::Program {
     Hors::GLBuffer materialsBuffer;
     Hors::GLBuffer usedQuadsBuffer;
     Hors::GLBuffer fColumnBuffer, fRowBuffer;
+    Hors::GLBuffer gColumnBuffer, gRowBuffer;
+    Hors::GLBuffer doubelReflection;
     std::vector<int> quadsOrder;
     glm::vec3 lastPos;
     GLuint localMatrixTex;
@@ -266,6 +269,11 @@ class RadiosityProgram : public Hors::Program {
         fRowBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(Get<int>("MatrixSize")));
         fColumnBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(Get<int>("MatrixSize")));
 
+        gRowBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(Get<int>("MatrixSize")));
+        gColumnBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(Get<int>("MatrixSize")));
+
+        doubelReflection = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(1));
+
         glGenTextures(1, &localMatrixTex); CHECK_GL_ERRORS;
         glBindTexture(GL_TEXTURE_2D, localMatrixTex); CHECK_GL_ERRORS;
         glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA16F, Get<int>("MatrixSize"), Get<int>("MatrixSize")); CHECK_GL_ERRORS;
@@ -323,6 +331,31 @@ class RadiosityProgram : public Hors::Program {
 
         glBindImageTexture(0, localMatrixTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA16F); CHECK_GL_ERRORS;
 
+        computeDoubleReflectionCS = Hors::CompileComputeShaderProgram(
+                Hors::ReadAndCompileShader("shaders/ComputeDoubleReflection.comp", GL_COMPUTE_SHADER)
+        );
+        glUseProgram(computeDoubleReflectionCS); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *quadsInMatrixBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, *quadsInMatrixBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *materialsBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, *materialsBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *fRowBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, *fRowBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *fColumnBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, *fColumnBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *doubelReflection); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, *doubelReflection); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
         addToMatrixCS = Hors::CompileComputeShaderProgram(
                 Hors::ReadAndCompileShader("shaders/AddToMatrix.comp", GL_COMPUTE_SHADER)
         );
@@ -346,6 +379,10 @@ class RadiosityProgram : public Hors::Program {
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, *fColumnBuffer); CHECK_GL_ERRORS;
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, *fColumnBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *doubelReflection); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, *doubelReflection); CHECK_GL_ERRORS;
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
 
         glBindImageTexture(0, localMatrixTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA16F); CHECK_GL_ERRORS;
@@ -652,25 +689,36 @@ class RadiosityProgram : public Hors::Program {
         glFlush(); CHECK_GL_ERRORS;
 
         {
+            LabeledTimer2 timer("RemoveOldValues");
             Hors::SetUniform(removeOldValuesCS, "place", place);
 
-            glUseProgram(removeOldValuesCS);
-            CHECK_GL_ERRORS;
+            glUseProgram(removeOldValuesCS); CHECK_GL_ERRORS;
 
-            glMemoryBarrier(GL_ALL_BARRIER_BITS);
-            glDispatchCompute(Get<int>("MatrixSize") / 1024, 1, 1);
-            glMemoryBarrier(GL_ALL_BARRIER_BITS);
+            glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
+            glDispatchCompute(Get<int>("MatrixSize") / 1024, 1, 1); CHECK_GL_ERRORS;
+            glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
         }
 
         {
+            LabeledTimer2 timer("DoubleReflection");
+            Hors::SetUniform(computeDoubleReflectionCS, "place", place);
+
+            glUseProgram(computeDoubleReflectionCS); CHECK_GL_ERRORS;
+
+            glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
+            glDispatchCompute(1, 1, 1); CHECK_GL_ERRORS;
+            glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
+        }
+
+        {
+            LabeledTimer2 timer("AddToMatrixCS");
             Hors::SetUniform(addToMatrixCS, "place", place);
 
-            glUseProgram(addToMatrixCS);
-            CHECK_GL_ERRORS;
+            glUseProgram(addToMatrixCS); CHECK_GL_ERRORS;
 
-            glMemoryBarrier(GL_ALL_BARRIER_BITS);
-            glDispatchCompute(1, 1, 1);
-            glMemoryBarrier(GL_ALL_BARRIER_BITS);
+            glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
+            glDispatchCompute(1, 1, 1); CHECK_GL_ERRORS;
+            glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
         }
         glFinish(); CHECK_GL_ERRORS;
     }
