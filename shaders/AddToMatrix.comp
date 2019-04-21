@@ -72,28 +72,6 @@ void main() {
     vec4 g_row = gRow[trIdx];
     vec4 placeColor = localColors[place];
 
-//    buff[trIdx] = f_row * color;
-//    memoryBarrierShared();
-//    barrier();
-//
-//    for (int i = 0; i < MATRIX_SIZE; ++i) {
-//        g_row += imageLoad(localMatrixTex, ivec2(i, trIdx)) * buff[i];
-//    }
-//    memoryBarrierShared();
-//    barrier();
-
-    buff[trIdx] = usedQuads[trIdx] == 0 ? g_column * placeColor : vec4(0);
-
-    memoryBarrierShared();
-    barrier();
-
-    for (int i = 0; i < MATRIX_SIZE; ++i) {
-        imageStore(localMatrixTex, ivec2(i, trIdx), imageLoad(localMatrixTex, ivec2(i, trIdx)) + buff[i] * g_row);
-    }
-
-    memoryBarrierShared();
-    barrier();
-
     buff[trIdx] = g_row * color;
     buff2[trIdx] = (usedQuads[trIdx] != 0) ? vec4(0) : g_column;
 

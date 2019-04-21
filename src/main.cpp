@@ -97,6 +97,7 @@ class RadiosityProgram : public Hors::Program {
     GLuint computeTripleReflectionCS;
     GLuint addColumnInterReflectionCS;
     GLuint addRowInterReflectionCS;
+    GLuint sumMatricesCS;
     std::vector<glm::vec4> perQuadPositions, perQuadColors;
     std::vector<unsigned> renderedQuads;
     std::vector<glm::vec4> materialsEmission;
@@ -396,6 +397,29 @@ class RadiosityProgram : public Hors::Program {
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, *gRowBuffer); CHECK_GL_ERRORS;
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, *gRowBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *localColorsBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, *localColorsBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glBindImageTexture(0, localMatrixTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA16F); CHECK_GL_ERRORS;
+
+        sumMatricesCS = Hors::CompileComputeShaderProgram(
+                Hors::ReadAndCompileShader("shaders/SumMatrices.comp", GL_COMPUTE_SHADER)
+        );
+        glUseProgram(sumMatricesCS); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *usedQuadsBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, *usedQuadsBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *gRowBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, *gRowBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *gColumnBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 9, *gColumnBuffer); CHECK_GL_ERRORS;
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, *localColorsBuffer); CHECK_GL_ERRORS;
@@ -815,6 +839,17 @@ class RadiosityProgram : public Hors::Program {
 
             glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
             glDispatchCompute(Get<int>("MatrixSize"), 1, 1); CHECK_GL_ERRORS;
+            glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
+        }
+
+        {
+            LabeledTimer2 timer("sumMatrices");
+            Hors::SetUniform(sumMatricesCS, "place", place);
+
+            glUseProgram(sumMatricesCS); CHECK_GL_ERRORS;
+
+            glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
+            glDispatchCompute(Get<int>("MatrixSize") / 32, Get<int>("MatrixSize") / 32, 1); CHECK_GL_ERRORS;
             glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
         }
 

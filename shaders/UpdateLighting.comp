@@ -32,5 +32,5 @@ void main() {
     for (int i = 0; i < MATRIX_SIZE; ++i) {
         lighting += mats[quadsInMatrix[i]].emission * imageLoad(localMatrixTex, ivec2(gl_GlobalInvocationID.x, i));
     }
-    indirect_light[globalIdx] = lighting;
+    indirect_light[globalIdx] = lighting + mats[globalIdx].emission;
 }
