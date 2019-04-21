@@ -54,52 +54,23 @@ layout(std430, binding = 9) buffer layoutName12
     vec4 gColumn[];
 };
 
+layout(std430, binding = 10) buffer layoutName13
+{
+    vec4 localColors[];
+};
+
 
 layout(local_size_x = MATRIX_SIZE, local_size_y = 1) in;
 layout(location = 0, rgba16f) uniform image2D localMatrixTex;
 void main() {
     uint trIdx = gl_GlobalInvocationID.x;
 
-    uint idx = quadsInMatrix[trIdx];
     vec4 f_column = fColumn[trIdx];
     vec4 f_row = fRow[trIdx];
-    vec4 color = mats[idx].color;
+    vec4 color = localColors[trIdx];
     vec4 g_column = gColumn[trIdx];
     vec4 g_row = gRow[trIdx];
-    vec4 placeColor = mats[quadsInMatrix[place]].color;
-
-//    imageStore(localMatrixTex, ivec2(place, trIdx), vec4(0, 0, 0, 0));
-//    imageStore(localMatrixTex, ivec2(trIdx, place), vec4(0, 0, 0, 0));
-
-//    buff[trIdx] = f_column * f_row * color;
-//    memoryBarrierShared();
-//    barrier();
-//
-//    for (int i = MATRIX_SIZE / 2; i > 0; i >>= 1) {
-//        if (trIdx < i) {
-//            buff[trIdx] += buff[i + trIdx];
-//        }
-//        memoryBarrierShared();
-//        barrier();
-//    }
-//
-//    vec4 double_reflection = buff[0] * placeColor;
-//
-//    memoryBarrierShared();
-//    barrier();
-
-//    g_column += f_column * doubleReflection;
-//    g_row += f_row * doubleReflection;
-
-    buff[trIdx] = f_column * color;
-    memoryBarrierShared();
-    barrier();
-
-    for (int i = 0; i < MATRIX_SIZE; ++i) {
-        g_column += imageLoad(localMatrixTex, ivec2(trIdx, i)) * buff[i];
-    }
-    memoryBarrierShared();
-    barrier();
+    vec4 placeColor = localColors[place];
 
     buff[trIdx] = f_row * color;
     memoryBarrierShared();

@@ -1,0 +1,57 @@
+#version 450
+
+const int THREADS_COUNT = 512;
+
+const int MATRIX_SIZE = 1024;
+
+//const int THREADS_PER_ROW = 32;
+
+shared vec4 buff[THREADS_COUNT];
+
+layout(std430, binding = 6) buffer layoutName9
+{
+    vec4 fColumn[];
+};
+
+layout(std430, binding = 9) buffer layoutName12
+{
+    vec4 gColumn[];
+};
+
+layout(std430, binding = 10) buffer layoutName13
+{
+    vec4 localColors[];
+};
+
+
+layout(local_size_x = THREADS_COUNT) in;
+layout(location = 0, rgba16f) uniform image2D localMatrixTex;
+void main() {
+    uint trIdx = gl_LocalInvocationID.x;
+    uint rowIdx = gl_WorkGroupID.x;
+
+    vec4 f_column = fColumn[trIdx];
+
+    buff[trIdx] = fColumn[trIdx] * localColors[trIdx] * imageLoad(localMatrixTex, ivec2(rowIdx, trIdx))
+        + fColumn[trIdx + MATRIX_SIZE / 2] * localColors[trIdx + MATRIX_SIZE / 2] * imageLoad(localMatrixTex, ivec2(rowIdx, trIdx + MATRIX_SIZE / 2));
+    memoryBarrierShared();
+    barrier();
+
+    for (int i = MATRIX_SIZE / 4; i > 32; i >>= 1) {
+        if (trIdx < i) {
+            buff[trIdx] += buff[i + trIdx];
+        }
+        memoryBarrierShared();
+        barrier();
+    }
+
+    for (int i = 32; i > 0; i >>= 1) {
+        if (trIdx < i) {
+            buff[trIdx] += buff[i + trIdx];
+        }
+    }
+
+    if (trIdx == 0) {
+        gColumn[rowIdx] += buff[0];
+    }
+}

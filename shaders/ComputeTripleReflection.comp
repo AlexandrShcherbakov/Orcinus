@@ -31,7 +31,6 @@ layout(std430, binding = 9) buffer layoutName12
 
 
 layout(local_size_x = THREADS_COUNT) in;
-layout(location = 0, rgba16f) uniform image2D localMatrixTex;
 void main() {
     uint trIdx = gl_GlobalInvocationID.x;
 
