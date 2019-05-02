@@ -117,12 +117,17 @@ class Quad {
 public:
     Quad(const ModelVertex& a, const ModelVertex& b, const ModelVertex& c, const ModelVertex& d) {
         Vertices = {a, b, c, d};
-        if (Vertices[0].GetMaterialNumber() == 44) {
-            normal = glm::vec4(glm::cross(glm::vec3(Vertices[3].GetPoint() - Vertices[0].GetPoint()), glm::vec3(Vertices[1].GetPoint() - Vertices[0].GetPoint())), 0);
-        } else {
-            normal = glm::vec4(glm::cross(glm::vec3(Vertices[1].GetPoint() - Vertices[0].GetPoint()),
-                                          glm::vec3(Vertices[3].GetPoint() - Vertices[0].GetPoint())), 0);
-        }
+//        if (Vertices[0].GetMaterialNumber() == 44) {
+//            normal = glm::vec4(glm::cross(glm::vec3(Vertices[3].GetPoint() - Vertices[0].GetPoint()), glm::vec3(Vertices[1].GetPoint() - Vertices[0].GetPoint())), 0);
+//        } else {
+//
+//        }
+        normal = glm::vec4(glm::cross(glm::vec3(Vertices[1].GetPoint() - Vertices[0].GetPoint()),
+                                      glm::vec3(Vertices[3].GetPoint() - Vertices[0].GetPoint())), 0);
+
+        if (dot(normal, a.GetNormal()) < 0)
+            normal = -normal;
+
 //        normal = glm::vec4(glm::normalize(glm::vec3(a.GetNormal())), 0);
     }
 
