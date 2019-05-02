@@ -30,27 +30,34 @@ void main() {
     uint trIdx = gl_LocalInvocationID.x;
     uint columnIdx = gl_WorkGroupID.x;
 
+    vec4 result = vec4(0);
 
-    buff[trIdx] = fRow[trIdx] * localColors[trIdx] * imageLoad(localMatrixTex, ivec2(trIdx, columnIdx))
-        + fRow[trIdx + MATRIX_SIZE / 2] * localColors[trIdx + MATRIX_SIZE / 2] * imageLoad(localMatrixTex, ivec2(trIdx + MATRIX_SIZE / 2, columnIdx));
-    memoryBarrierShared();
-    barrier();
-
-    for (int i = MATRIX_SIZE / 4; i > 32; i >>= 1) {
-        if (trIdx < i) {
-            buff[trIdx] += buff[i + trIdx];
-        }
+    for (int iter = 0; iter < MATRIX_SIZE / THREADS_COUNT / 2; ++iter) {
+        buff[trIdx] = fRow[trIdx + iter * THREADS_COUNT] * localColors[trIdx + iter * THREADS_COUNT] * imageLoad(localMatrixTex, ivec2(trIdx + iter * THREADS_COUNT, columnIdx))
+        + fRow[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2] * localColors[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2] * imageLoad(localMatrixTex, ivec2(trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2, columnIdx));
         memoryBarrierShared();
         barrier();
-    }
 
-    for (int i = 32; i > 0; i >>= 1) {
-        if (trIdx < i) {
-            buff[trIdx] += buff[i + trIdx];
+        for (int i = MATRIX_SIZE / 4; i > 32; i >>= 1) {
+            if (trIdx < i) {
+                buff[trIdx] += buff[i + trIdx];
+            }
+            memoryBarrierShared();
+            barrier();
+        }
+
+        for (int i = 32; i > 0; i >>= 1) {
+            if (trIdx < i) {
+                buff[trIdx] += buff[i + trIdx];
+            }
+        }
+
+        if (trIdx == 0) {
+            result += buff[0];
         }
     }
 
     if (trIdx == 0) {
-        gRow[columnIdx] += buff[0];
+        gRow[columnIdx] += result;
     }
 }

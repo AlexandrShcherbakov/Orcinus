@@ -41,7 +41,7 @@ layout(std430, binding = 6) buffer layoutName9
 
 layout(std430, binding = 7) buffer layoutName10
 {
-    vec4 doubleReflection;
+    vec4 doubleReflection[];
 };
 
 layout(std430, binding = 10) buffer layoutName13
@@ -51,22 +51,21 @@ layout(std430, binding = 10) buffer layoutName13
 
 layout(local_size_x = THREADS_COUNT) in;
 void main() {
-    uint trIdx = gl_GlobalInvocationID.x;
+    uint trIdx = gl_LocalInvocationID.x;
 
-    uint idx = quadsInMatrix[trIdx];
-    vec4 f_column = fColumn[trIdx];
-    vec4 f_row = fRow[trIdx];
+    uint idx = quadsInMatrix[gl_GlobalInvocationID.x];
+    vec4 f_column = fColumn[gl_GlobalInvocationID.x];
+    vec4 f_row = fRow[gl_GlobalInvocationID.x];
     vec4 color = mats[idx].color;
-    vec4 g_column = fColumn[trIdx];
-    vec4 g_row = fRow[trIdx];
     vec4 placeColor = mats[quadsInMatrix[place]].color;
 
     vec4 colorFirst = mats[idx].color;
-    vec4 colorSecond =  mats[quadsInMatrix[trIdx + MATRIX_SIZE / 2]].color;
-    localColors[trIdx] = colorFirst;
-    localColors[trIdx + MATRIX_SIZE / 2] = colorSecond;
+    vec4 colorSecond =  mats[quadsInMatrix[gl_GlobalInvocationID.x + MATRIX_SIZE / 2]].color;
+    localColors[gl_GlobalInvocationID.x] = colorFirst;
+    localColors[gl_GlobalInvocationID.x + MATRIX_SIZE / 2] = colorSecond;
 
-    buff[trIdx] = fColumn[trIdx] * fRow[trIdx] * colorFirst + fColumn[trIdx + MATRIX_SIZE / 2] * fRow[trIdx + MATRIX_SIZE / 2] * colorSecond;
+    buff[trIdx] = fColumn[gl_GlobalInvocationID.x] * fRow[gl_GlobalInvocationID.x] * colorFirst
+        + fColumn[gl_GlobalInvocationID.x + MATRIX_SIZE / 2] * fRow[gl_GlobalInvocationID.x + MATRIX_SIZE / 2] * colorSecond;
     memoryBarrierShared();
     barrier();
 
@@ -85,6 +84,6 @@ void main() {
     }
 
     if (trIdx == 0) {
-        doubleReflection = buff[0] * placeColor;
+        doubleReflection[gl_GlobalInvocationID.x / THREADS_COUNT] = buff[0] * placeColor;
     }
 }
