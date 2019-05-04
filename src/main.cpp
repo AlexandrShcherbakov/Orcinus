@@ -120,6 +120,7 @@ class RadiosityProgram : public Hors::Program {
     Hors::GLBuffer fColumnBuffer, fRowBuffer;
     Hors::GLBuffer gColumnBuffer, gRowBuffer;
     Hors::GLBuffer localColorsBuffer;
+    Hors::GLBuffer localEmissionBuffer;
     Hors::GLBuffer doubelReflection;
     std::vector<int> quadsOrder;
     std::vector<glm::vec4> directLight;
@@ -281,6 +282,8 @@ class RadiosityProgram : public Hors::Program {
 
         localColorsBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(Get<int>("MatrixSize")));
 
+        localEmissionBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(Get<int>("MatrixSize")));
+
         doubelReflection = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(std::max(Get<int>("MatrixSize") / 1024, 1)));
 
         glGenTextures(1, &localMatrixTex); CHECK_GL_ERRORS;
@@ -339,6 +342,10 @@ class RadiosityProgram : public Hors::Program {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, *materialsBuffer); CHECK_GL_ERRORS;
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
 
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *localEmissionBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 11, *localEmissionBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
         glBindImageTexture(0, localMatrixTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA16F);CHECK_GL_ERRORS;
 
         usedQuadsBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(std::vector<int>(Get<int>("MatrixSize")));
@@ -377,6 +384,10 @@ class RadiosityProgram : public Hors::Program {
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, *localColorsBuffer); CHECK_GL_ERRORS;
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, *localColorsBuffer); CHECK_GL_ERRORS;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, *localEmissionBuffer); CHECK_GL_ERRORS;
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 11, *localEmissionBuffer); CHECK_GL_ERRORS;
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
 
         addColumnInterReflectionCS = Hors::CompileComputeShaderProgram(

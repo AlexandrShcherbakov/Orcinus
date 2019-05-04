@@ -48,6 +48,11 @@ layout(std430, binding = 10) buffer layoutName13
     vec4 localColors[];
 };
 
+layout(std430, binding = 11) buffer layoutName14
+{
+    vec4 localEmission[];
+};
+
 layout(local_size_x = THREADS_COUNT) in;
 void main() {
     uint trIdx = gl_LocalInvocationID.x;
@@ -62,6 +67,9 @@ void main() {
     vec4 colorSecond =  mats[quadsInMatrix[gl_GlobalInvocationID.x + MATRIX_SIZE / 2]].color;
     localColors[gl_GlobalInvocationID.x] = colorFirst;
     localColors[gl_GlobalInvocationID.x + MATRIX_SIZE / 2] = colorSecond;
+
+    localEmission[gl_GlobalInvocationID.x] = mats[quadsInMatrix[gl_LocalInvocationID.x]].emission;
+    localEmission[gl_GlobalInvocationID.x + MATRIX_SIZE / 2] = mats[quadsInMatrix[gl_LocalInvocationID.x + MATRIX_SIZE / 2]].emission;
 
     buff[trIdx] = fColumn[gl_GlobalInvocationID.x] * fRow[gl_GlobalInvocationID.x] * colorFirst
         + fColumn[gl_GlobalInvocationID.x + MATRIX_SIZE / 2] * fRow[gl_GlobalInvocationID.x + MATRIX_SIZE / 2] * colorSecond;

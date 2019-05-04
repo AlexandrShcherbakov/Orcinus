@@ -27,6 +27,11 @@ layout(std430, binding = 3) buffer layoutName4
     material mats[];
 };
 
+layout(std430, binding = 11) buffer layoutName13
+{
+    vec4 localEmission[];
+};
+
 layout(local_size_x = THREADS_COUNT) in;
 layout (location = 0, rgba16f) uniform image2D localMatrixTex;
 void main() {
@@ -36,9 +41,9 @@ void main() {
     vec4 result = vec4(0);
 
     for (int iter = 0; iter < MATRIX_SIZE / THREADS_COUNT / 2; ++iter) {
-        vec4 emission1 = mats[quadsInMatrix[trIdx + iter * THREADS_COUNT]].emission;
+        vec4 emission1 = localEmission[trIdx + iter * THREADS_COUNT];//mats[quadsInMatrix[trIdx + iter * THREADS_COUNT]].emission;
         vec4 ff1 = imageLoad(localMatrixTex, ivec2(rowIdx, trIdx + iter * THREADS_COUNT));
-        vec4 emission2 = mats[quadsInMatrix[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2]].emission;
+        vec4 emission2 = localEmission[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2];//mats[quadsInMatrix[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2]].emission;
         vec4 ff2 = imageLoad(localMatrixTex, ivec2(rowIdx, trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2));
 
         buff[trIdx] = emission1 * ff1 + emission2 * ff2;
@@ -68,6 +73,6 @@ void main() {
     }
 
     if (trIdx == 0) {
-        indirect_light[quadsInMatrix[rowIdx]] = result + mats[quadsInMatrix[rowIdx]].emission;
+        indirect_light[quadsInMatrix[rowIdx]] = result + localEmission[rowIdx];
     }
 }
