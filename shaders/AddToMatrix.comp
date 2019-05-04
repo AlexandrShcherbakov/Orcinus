@@ -4,9 +4,10 @@ uniform int dynamicMatrixSize;
 uniform int place;
 
 const int MATRIX_SIZE = 1024;
+const int THREADS_COUNT = 512;
 
-shared vec4 buff[MATRIX_SIZE];
-shared vec4 buff2[MATRIX_SIZE];
+shared vec4 buff[THREADS_COUNT];
+shared vec4 buff2[THREADS_COUNT];
 
 layout(std430, binding = 2) buffer layoutName3
 {
@@ -60,37 +61,62 @@ layout(std430, binding = 10) buffer layoutName13
 };
 
 
-layout(local_size_x = MATRIX_SIZE, local_size_y = 1) in;
+layout(local_size_x = MATRIX_SIZE) in;
 layout(location = 0, rgba16f) uniform image2D localMatrixTex;
 void main() {
-    uint trIdx = gl_GlobalInvocationID.x;
+//    uint trIdx = gl_GlobalInvocationID.x;
+    uint trIdx = gl_LocalInvocationID.x;
+    uint columnIdx = gl_WorkGroupID.x;
 
-    vec4 f_column = fColumn[trIdx];
-    vec4 f_row = fRow[trIdx];
-    vec4 color = localColors[trIdx];
-    vec4 g_column = gColumn[trIdx];
-    vec4 g_row = gRow[trIdx];
-    vec4 placeColor = localColors[place];
+    vec4 b1_sum = vec4(0);
+    vec4 b2_sum = vec4(0);
 
-    buff[trIdx] = g_row * color;
-    buff2[trIdx] = (usedQuads[trIdx] != 0) ? vec4(0) : g_column;
+    for (int iter = 0; iter < MATRIX_SIZE / THREADS_COUNT / 2; ++iter) {
+        vec4 color1 = localColors[trIdx + iter * THREADS_COUNT];
+        vec4 g_column1 = gColumn[trIdx + iter * THREADS_COUNT];
+        vec4 g_row1 = gRow[trIdx + iter * THREADS_COUNT];
+        uint isUsed1 = usedQuads[trIdx + iter * THREADS_COUNT];
+        vec4 color2 = localColors[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2];
+        vec4 g_column2 = gColumn[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2];
+        vec4 g_row2 = gRow[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2];
+        uint isUsed2 = usedQuads[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2];
 
-    imageStore(localMatrixTex, ivec2(place, trIdx), g_row);
-    imageStore(localMatrixTex, ivec2(trIdx, place), g_column);
+        imageStore(localMatrixTex, ivec2(place, trIdx + iter * THREADS_COUNT), g_row1);
+        imageStore(localMatrixTex, ivec2(trIdx + iter * THREADS_COUNT, place), g_column1);
+        imageStore(localMatrixTex, ivec2(place, trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2), g_row2);
+        imageStore(localMatrixTex, ivec2(trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2, place), g_column2);
 
-    memoryBarrierShared();
-    barrier();
+        buff[trIdx] = g_row1 * color1 + g_row2 * color2;
+        buff2[trIdx] = (isUsed1 != 0 ? vec4(0) : g_column1) + (isUsed2 != 0 ? vec4(0) : g_column2);
+        memoryBarrierShared();
+        barrier();
 
-    for (int i = MATRIX_SIZE / 2; i > 0; i >>= 1) {
-        if (trIdx < i) {
-            buff[trIdx] += buff[i + trIdx];
-            buff2[trIdx] += buff2[i + trIdx];
+        for (int i = MATRIX_SIZE / 4; i > 32; i >>= 1) {
+            if (trIdx < i) {
+                buff[trIdx] += buff[i + trIdx];
+                buff2[trIdx] += buff2[i + trIdx];
+            }
+            memoryBarrierShared();
+            barrier();
         }
+
+        for (int i = 32; i > 0; i >>= 1) {
+            if (trIdx < i) {
+                buff[trIdx] += buff[i + trIdx];
+                buff2[trIdx] += buff2[i + trIdx];
+            }
+        }
+
+        if (trIdx == 0) {
+            b1_sum += buff[0];
+            b2_sum += buff2[0];
+        }
+
         memoryBarrierShared();
         barrier();
     }
 
-    if (trIdx == 0) {
-        imageStore(localMatrixTex, ivec2(place, place), buff[0] * buff2[0]);
+    if (gl_GlobalInvocationID.x == 0) {
+        imageStore(localMatrixTex, ivec2(place, place), b1_sum * b2_sum);
     }
 }
