@@ -294,6 +294,12 @@ class RadiosityProgram : public Hors::Program {
 
         glUseProgram(QuadRender); CHECK_GL_ERRORS;
 
+        std::stringstream ss;
+        ss << Get<int>("MatrixSize");
+        std::map<string, string> replacement;
+        replacement["MATRIX_SIZE_VALUE"] = ss.str();
+        cout << replacement["MATRIX_SIZE_VALUE"] << ' ' << Get<int>("MatrixSize") << endl;
+
         GLuint QuadVAO;
         glGenVertexArrays(1, &QuadVAO); CHECK_GL_ERRORS;
         glBindVertexArray(QuadVAO); CHECK_GL_ERRORS;
@@ -318,7 +324,7 @@ class RadiosityProgram : public Hors::Program {
 
 
         updateLightCS = Hors::CompileComputeShaderProgram(
-                Hors::ReadAndCompileShader("shaders/UpdateLighting.comp", GL_COMPUTE_SHADER)
+                Hors::ReadAndCompileShader("shaders/UpdateLighting.comp", GL_COMPUTE_SHADER, replacement)
         );
         glUseProgram(updateLightCS); CHECK_GL_ERRORS;
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, *perQuadIndirect); CHECK_GL_ERRORS;
@@ -345,7 +351,7 @@ class RadiosityProgram : public Hors::Program {
         glBindImageTexture(0, localMatrixTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA16F); CHECK_GL_ERRORS;
 
         computeDoubleReflectionCS = Hors::CompileComputeShaderProgram(
-                Hors::ReadAndCompileShader("shaders/ComputeDoubleReflection.comp", GL_COMPUTE_SHADER)
+                Hors::ReadAndCompileShader("shaders/ComputeDoubleReflection.comp", GL_COMPUTE_SHADER, replacement)
         );
         glUseProgram(computeDoubleReflectionCS); CHECK_GL_ERRORS;
 
@@ -374,7 +380,7 @@ class RadiosityProgram : public Hors::Program {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); CHECK_GL_ERRORS;
 
         addColumnInterReflectionCS = Hors::CompileComputeShaderProgram(
-                Hors::ReadAndCompileShader("shaders/AddColumnInterReflection.comp", GL_COMPUTE_SHADER)
+                Hors::ReadAndCompileShader("shaders/AddColumnInterReflection.comp", GL_COMPUTE_SHADER, replacement)
         );
         glUseProgram(addColumnInterReflectionCS); CHECK_GL_ERRORS;
 
@@ -393,7 +399,7 @@ class RadiosityProgram : public Hors::Program {
         glBindImageTexture(0, localMatrixTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA16F); CHECK_GL_ERRORS;
 
         addRowInterReflectionCS = Hors::CompileComputeShaderProgram(
-                Hors::ReadAndCompileShader("shaders/AddRowInterReflection.comp", GL_COMPUTE_SHADER)
+                Hors::ReadAndCompileShader("shaders/AddRowInterReflection.comp", GL_COMPUTE_SHADER, replacement)
         );
         glUseProgram(addRowInterReflectionCS); CHECK_GL_ERRORS;
 
@@ -435,7 +441,7 @@ class RadiosityProgram : public Hors::Program {
         glBindImageTexture(0, localMatrixTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA16F); CHECK_GL_ERRORS;
 
         addToMatrixCS = Hors::CompileComputeShaderProgram(
-                Hors::ReadAndCompileShader("shaders/AddToMatrix.comp", GL_COMPUTE_SHADER)
+                Hors::ReadAndCompileShader("shaders/AddToMatrix.comp", GL_COMPUTE_SHADER, replacement)
         );
         glUseProgram(addToMatrixCS); CHECK_GL_ERRORS;
 
@@ -470,7 +476,7 @@ class RadiosityProgram : public Hors::Program {
         glBindImageTexture(0, localMatrixTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA16F); CHECK_GL_ERRORS;
 
         computeTripleReflectionCS = Hors::CompileComputeShaderProgram(
-                Hors::ReadAndCompileShader("shaders/ComputeTripleReflection.comp", GL_COMPUTE_SHADER)
+                Hors::ReadAndCompileShader("shaders/ComputeTripleReflection.comp", GL_COMPUTE_SHADER, replacement)
         );
         glUseProgram(computeTripleReflectionCS); CHECK_GL_ERRORS;
 
@@ -1053,7 +1059,7 @@ public:
         quadsOrder.resize(hierarchicalFF.size());
         updateQuadsOrder();
 
-        InitDynamicMatrix();
+//        InitDynamicMatrix();
         usedQuads.resize(static_cast<unsigned long>(quadsHierarchy.GetSize()));
         for (auto &usedQuad : usedQuads) {
             usedQuad.assign(static_cast<unsigned long>(quadsHierarchy.GetSize()), false);
