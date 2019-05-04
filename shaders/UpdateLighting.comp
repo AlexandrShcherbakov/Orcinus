@@ -31,36 +31,44 @@ layout(std430, binding = 3) buffer layoutName4
 layout(local_size_x = THREADS_COUNT) in;
 layout (location = 0, rgba16f) uniform image2D localMatrixTex;
 void main() {
-//    uint globalIdx = quadsInMatrix[gl_GlobalInvocationID.x];
-//    vec4 lighting = vec4(0, 0, 0, 0);
-//    for (int i = 0; i < MATRIX_SIZE; ++i) {
-//        lighting += mats[quadsInMatrix[i]].emission * imageLoad(localMatrixTex, ivec2(gl_GlobalInvocationID.x, i));
-//    }
-//    indirect_light[globalIdx] = lighting + mats[globalIdx].emission;
-
     uint trIdx = gl_LocalInvocationID.x;
     uint rowIdx = gl_WorkGroupID.x;
 
-    buff[trIdx] = mats[quadsInMatrix[trIdx]].emission *  imageLoad(localMatrixTex, ivec2(rowIdx, trIdx))
-        + mats[quadsInMatrix[trIdx + MATRIX_SIZE / 2]].emission *  imageLoad(localMatrixTex, ivec2(rowIdx, trIdx + MATRIX_SIZE / 2));
-    memoryBarrierShared();
-    barrier();
+    vec4 result = vec4(0);
 
-    for (int i = MATRIX_SIZE / 4; i > 32; i >>= 1) {
-        if (trIdx < i) {
-            buff[trIdx] += buff[i + trIdx];
+    for (int iter = 0; iter < MATRIX_SIZE / THREADS_COUNT / 2; ++iter) {
+        vec4 emission1 = mats[quadsInMatrix[trIdx + iter * THREADS_COUNT]].emission;
+        vec4 ff1 = imageLoad(localMatrixTex, ivec2(rowIdx, trIdx + iter * THREADS_COUNT));
+        vec4 emission2 = mats[quadsInMatrix[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2]].emission;
+        vec4 ff2 = imageLoad(localMatrixTex, ivec2(rowIdx, trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2));
+
+        buff[trIdx] = emission1 * ff1 + emission2 * ff2;
+        memoryBarrierShared();
+        barrier();
+
+        for (int i = MATRIX_SIZE / 4; i > 32; i >>= 1) {
+            if (trIdx < i) {
+                buff[trIdx] += buff[i + trIdx];
+            }
+            memoryBarrierShared();
+            barrier();
         }
+
+        for (int i = 32; i > 0; i >>= 1) {
+            if (trIdx < i) {
+                buff[trIdx] += buff[i + trIdx];
+            }
+        }
+
+        if (trIdx == 0) {
+            result += buff[0];
+        }
+
         memoryBarrierShared();
         barrier();
     }
 
-    for (int i = 32; i > 0; i >>= 1) {
-        if (trIdx < i) {
-            buff[trIdx] += buff[i + trIdx];
-        }
-    }
-
     if (trIdx == 0) {
-        indirect_light[quadsInMatrix[rowIdx]] = buff[0] + mats[quadsInMatrix[rowIdx]].emission;
+        indirect_light[quadsInMatrix[rowIdx]] = result + mats[quadsInMatrix[rowIdx]].emission;
     }
 }
