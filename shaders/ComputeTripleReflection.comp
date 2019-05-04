@@ -1,8 +1,7 @@
 #version 450
 
-const int THREADS_COUNT = 1024;
-
 const int MATRIX_SIZE = 1024;
+const int THREADS_COUNT = min(MATRIX_SIZE, 1024);
 
 layout(std430, binding = 5) buffer layoutName8
 {

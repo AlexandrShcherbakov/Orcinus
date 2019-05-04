@@ -4,7 +4,7 @@ uniform int dynamicMatrixSize;
 uniform int place;
 
 const int MATRIX_SIZE = 1024;
-const int THREADS_COUNT = 512;
+const int THREADS_COUNT = min(1024, MATRIX_SIZE / 2);
 
 shared vec4 buff[THREADS_COUNT];
 shared vec4 buff2[THREADS_COUNT];
@@ -64,7 +64,6 @@ layout(std430, binding = 10) buffer layoutName13
 layout(local_size_x = THREADS_COUNT) in;
 layout(location = 0, rgba16f) uniform image2D localMatrixTex;
 void main() {
-//    uint trIdx = gl_GlobalInvocationID.x;
     uint trIdx = gl_LocalInvocationID.x;
     uint columnIdx = gl_WorkGroupID.x;
 

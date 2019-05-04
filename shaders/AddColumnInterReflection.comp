@@ -1,8 +1,7 @@
 #version 450
 
-const int THREADS_COUNT = 512;
-
 const int MATRIX_SIZE = 1024;
+const int THREADS_COUNT = min(1024, MATRIX_SIZE / 2);
 
 shared vec4 buff[THREADS_COUNT];
 
