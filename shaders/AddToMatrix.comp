@@ -6,23 +6,12 @@ uniform int place;
 const int MATRIX_SIZE = MATRIX_SIZE_VALUE;
 const int THREADS_COUNT = min(1024, MATRIX_SIZE / 2);
 
-shared vec4 buff[THREADS_COUNT];
-shared vec4 buff2[THREADS_COUNT];
+shared vec3 buff[THREADS_COUNT];
+shared vec3 buff2[THREADS_COUNT];
 
 layout(std430, binding = 2) buffer layoutName3
 {
     uint quadsInMatrix[];
-};
-
-struct material
-{
-    vec4 color;
-    vec4 emission;
-};
-
-layout(std430, binding = 3) buffer layoutName4
-{
-    material mats[];
 };
 
 layout(std430, binding = 4) buffer layoutName7
@@ -40,24 +29,19 @@ layout(std430, binding = 6) buffer layoutName9
     float fColumn[];
 };
 
-layout(std430, binding = 7) buffer layoutName10
-{
-    vec4 doubleReflection;
-};
-
 layout(std430, binding = 8) buffer layoutName11
 {
-    vec4 gRow[];
+    vec3 gRow[];
 };
 
 layout(std430, binding = 9) buffer layoutName12
 {
-    vec4 gColumn[];
+    vec3 gColumn[];
 };
 
 layout(std430, binding = 10) buffer layoutName13
 {
-    vec4 localColors[];
+    vec3 localColors[];
 };
 
 
@@ -67,26 +51,26 @@ void main() {
     uint trIdx = gl_LocalInvocationID.x;
     uint columnIdx = gl_WorkGroupID.x;
 
-    vec4 b1_sum = vec4(0);
-    vec4 b2_sum = vec4(0);
+    vec3 b1_sum = vec3(0);
+    vec3 b2_sum = vec3(0);
 
     for (int iter = 0; iter < MATRIX_SIZE / THREADS_COUNT / 2; ++iter) {
-        vec4 color1 = localColors[trIdx + iter * THREADS_COUNT];
-        vec4 g_column1 = gColumn[trIdx + iter * THREADS_COUNT];
-        vec4 g_row1 = gRow[trIdx + iter * THREADS_COUNT];
+        vec3 color1 = localColors[trIdx + iter * THREADS_COUNT];
+        vec3 g_column1 = gColumn[trIdx + iter * THREADS_COUNT];
+        vec3 g_row1 = gRow[trIdx + iter * THREADS_COUNT];
         uint isUsed1 = usedQuads[trIdx + iter * THREADS_COUNT];
-        vec4 color2 = localColors[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2];
-        vec4 g_column2 = gColumn[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2];
-        vec4 g_row2 = gRow[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2];
+        vec3 color2 = localColors[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2];
+        vec3 g_column2 = gColumn[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2];
+        vec3 g_row2 = gRow[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2];
         uint isUsed2 = usedQuads[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2];
 
-        imageStore(localMatrixTex, ivec2(place, trIdx + iter * THREADS_COUNT), g_row1);
-        imageStore(localMatrixTex, ivec2(trIdx + iter * THREADS_COUNT, place), g_column1);
-        imageStore(localMatrixTex, ivec2(place, trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2), g_row2);
-        imageStore(localMatrixTex, ivec2(trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2, place), g_column2);
+        imageStore(localMatrixTex, ivec2(place, trIdx + iter * THREADS_COUNT), vec4(g_row1, 0));
+        imageStore(localMatrixTex, ivec2(trIdx + iter * THREADS_COUNT, place), vec4(g_column1, 0));
+        imageStore(localMatrixTex, ivec2(place, trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2), vec4(g_row2, 0));
+        imageStore(localMatrixTex, ivec2(trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2, place), vec4(g_column2, 0));
 
         buff[trIdx] = g_row1 * color1 + g_row2 * color2;
-        buff2[trIdx] = (isUsed1 != 0 ? vec4(0) : g_column1) + (isUsed2 != 0 ? vec4(0) : g_column2);
+        buff2[trIdx] = (isUsed1 != 0 ? vec3(0) : g_column1) + (isUsed2 != 0 ? vec3(0) : g_column2);
         memoryBarrierShared();
         barrier();
 
@@ -116,6 +100,6 @@ void main() {
     }
 
     if (gl_GlobalInvocationID.x == 0) {
-        imageStore(localMatrixTex, ivec2(place, place), b1_sum * b2_sum);
+        imageStore(localMatrixTex, ivec2(place, place), vec4(b1_sum * b2_sum, 0));
     }
 }

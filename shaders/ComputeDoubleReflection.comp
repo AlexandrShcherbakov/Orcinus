@@ -14,8 +14,8 @@ layout(std430, binding = 2) buffer layoutName3
 
 struct material
 {
-    vec4 color;
-    vec4 emission;
+    vec3 color;
+    vec3 emission;
 };
 
 layout(std430, binding = 3) buffer layoutName4
@@ -40,17 +40,17 @@ layout(std430, binding = 6) buffer layoutName9
 
 layout(std430, binding = 7) buffer layoutName10
 {
-    vec4 doubleReflection[];
+    vec3 doubleReflection[];
 };
 
 layout(std430, binding = 10) buffer layoutName13
 {
-    vec4 localColors[];
+    vec3 localColors[];
 };
 
 layout(std430, binding = 11) buffer layoutName14
 {
-    vec4 localEmission[];
+    vec3 localEmission[];
 };
 
 layout(local_size_x = THREADS_COUNT) in;
@@ -62,8 +62,8 @@ void main() {
 
     vec3 colorFirst = mats[idx].color.rgb;
     vec3 colorSecond =  mats[quadsInMatrix[gl_GlobalInvocationID.x + MATRIX_SIZE / 2]].color.rgb;
-    localColors[gl_GlobalInvocationID.x] = vec4(colorFirst, 0);
-    localColors[gl_GlobalInvocationID.x + MATRIX_SIZE / 2] = vec4(colorSecond, 0);
+    localColors[gl_GlobalInvocationID.x] = colorFirst;
+    localColors[gl_GlobalInvocationID.x + MATRIX_SIZE / 2] = colorSecond;
 
     localEmission[gl_GlobalInvocationID.x] = mats[quadsInMatrix[gl_LocalInvocationID.x]].emission;
     localEmission[gl_GlobalInvocationID.x + MATRIX_SIZE / 2] = mats[quadsInMatrix[gl_LocalInvocationID.x + MATRIX_SIZE / 2]].emission;
@@ -88,6 +88,6 @@ void main() {
     }
 
     if (trIdx == 0) {
-        doubleReflection[gl_GlobalInvocationID.x / THREADS_COUNT] = vec4(buff[0] * placeColor, 0);
+        doubleReflection[gl_GlobalInvocationID.x / THREADS_COUNT] = buff[0] * placeColor;
     }
 }

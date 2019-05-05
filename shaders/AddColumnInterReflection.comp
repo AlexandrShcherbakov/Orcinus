@@ -3,7 +3,7 @@
 const int MATRIX_SIZE = MATRIX_SIZE_VALUE;
 const int THREADS_COUNT = min(1024, MATRIX_SIZE / 2);
 
-shared vec4 buff[THREADS_COUNT];
+shared vec3 buff[THREADS_COUNT];
 
 layout(std430, binding = 6) buffer layoutName9
 {
@@ -12,12 +12,12 @@ layout(std430, binding = 6) buffer layoutName9
 
 layout(std430, binding = 9) buffer layoutName12
 {
-    vec4 gColumn[];
+    vec3 gColumn[];
 };
 
 layout(std430, binding = 10) buffer layoutName13
 {
-    vec4 localColors[];
+    vec3 localColors[];
 };
 
 
@@ -27,12 +27,11 @@ void main() {
     uint trIdx = gl_LocalInvocationID.x;
     uint rowIdx = gl_WorkGroupID.x;
 
-//    vec4 f_column = fColumn[trIdx];
-    vec4 result = vec4(0);
+    vec3 result = vec3(0);
 
     for (int iter = 0; iter < MATRIX_SIZE / THREADS_COUNT / 2; ++iter) {
-        buff[trIdx] = fColumn[trIdx + iter * THREADS_COUNT * 2] * localColors[trIdx + iter * THREADS_COUNT * 2] * imageLoad(localMatrixTex, ivec2(rowIdx, trIdx + iter * THREADS_COUNT * 2))
-        + fColumn[trIdx + iter * THREADS_COUNT * 2 + MATRIX_SIZE / 2] * localColors[trIdx + iter * THREADS_COUNT * 2 + MATRIX_SIZE / 2] * imageLoad(localMatrixTex, ivec2(rowIdx, trIdx + iter * THREADS_COUNT * 2 + MATRIX_SIZE / 2));
+        buff[trIdx] = fColumn[trIdx + iter * THREADS_COUNT * 2] * localColors[trIdx + iter * THREADS_COUNT * 2] * imageLoad(localMatrixTex, ivec2(rowIdx, trIdx + iter * THREADS_COUNT * 2)).rgb
+        + fColumn[trIdx + iter * THREADS_COUNT * 2 + MATRIX_SIZE / 2] * localColors[trIdx + iter * THREADS_COUNT * 2 + MATRIX_SIZE / 2] * imageLoad(localMatrixTex, ivec2(rowIdx, trIdx + iter * THREADS_COUNT * 2 + MATRIX_SIZE / 2)).rgb;
         memoryBarrierShared();
         barrier();
 

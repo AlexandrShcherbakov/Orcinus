@@ -15,17 +15,17 @@ layout(std430, binding = 6) buffer layoutName9
 
 layout(std430, binding = 7) buffer layoutName10
 {
-    vec4 doubleReflection[];
+    vec3 doubleReflection[];
 };
 
 layout(std430, binding = 8) buffer layoutName11
 {
-    vec4 gRow[];
+    vec3 gRow[];
 };
 
 layout(std430, binding = 9) buffer layoutName12
 {
-    vec4 gColumn[];
+    vec3 gColumn[];
 };
 
 
@@ -33,7 +33,7 @@ layout(local_size_x = THREADS_COUNT) in;
 void main() {
     uint trIdx = gl_GlobalInvocationID.x;
 
-    vec4 double_reflection = vec4(1);
+    vec3 double_reflection = vec3(1);
     for (int i = 0; i < MATRIX_SIZE / THREADS_COUNT; ++i) {
         double_reflection += doubleReflection[i];
     }
