@@ -5,7 +5,7 @@ uniform int place;
 const int MATRIX_SIZE = MATRIX_SIZE_VALUE;
 const int THREADS_COUNT = min(1024, MATRIX_SIZE / 2);
 
-shared vec4 buff[THREADS_COUNT];
+shared vec3 buff[THREADS_COUNT];
 
 layout(std430, binding = 2) buffer layoutName3
 {
@@ -58,15 +58,12 @@ void main() {
     uint trIdx = gl_LocalInvocationID.x;
 
     uint idx = quadsInMatrix[gl_GlobalInvocationID.x];
-//    vec4 f_column = fColumn[gl_GlobalInvocationID.x];
-//    vec4 f_row = fRow[gl_GlobalInvocationID.x];
-    vec4 color = mats[idx].color;
-    vec4 placeColor = mats[quadsInMatrix[place]].color;
+    vec3 placeColor = mats[quadsInMatrix[place]].color.rgb;
 
-    vec4 colorFirst = mats[idx].color;
-    vec4 colorSecond =  mats[quadsInMatrix[gl_GlobalInvocationID.x + MATRIX_SIZE / 2]].color;
-    localColors[gl_GlobalInvocationID.x] = colorFirst;
-    localColors[gl_GlobalInvocationID.x + MATRIX_SIZE / 2] = colorSecond;
+    vec3 colorFirst = mats[idx].color.rgb;
+    vec3 colorSecond =  mats[quadsInMatrix[gl_GlobalInvocationID.x + MATRIX_SIZE / 2]].color.rgb;
+    localColors[gl_GlobalInvocationID.x] = vec4(colorFirst, 0);
+    localColors[gl_GlobalInvocationID.x + MATRIX_SIZE / 2] = vec4(colorSecond, 0);
 
     localEmission[gl_GlobalInvocationID.x] = mats[quadsInMatrix[gl_LocalInvocationID.x]].emission;
     localEmission[gl_GlobalInvocationID.x + MATRIX_SIZE / 2] = mats[quadsInMatrix[gl_LocalInvocationID.x + MATRIX_SIZE / 2]].emission;
@@ -91,6 +88,6 @@ void main() {
     }
 
     if (trIdx == 0) {
-        doubleReflection[gl_GlobalInvocationID.x / THREADS_COUNT] = buff[0] * placeColor;
+        doubleReflection[gl_GlobalInvocationID.x / THREADS_COUNT] = vec4(buff[0] * placeColor, 0);
     }
 }
