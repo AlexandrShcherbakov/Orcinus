@@ -274,8 +274,8 @@ class RadiosityProgram : public Hors::Program {
         }
         materialsBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(materials);
 
-        fRowBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(Get<int>("MatrixSize")));
-        fColumnBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(Get<int>("MatrixSize")));
+        fRowBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<float>(Get<int>("MatrixSize")));
+        fColumnBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<float>(Get<int>("MatrixSize")));
 
         gRowBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(Get<int>("MatrixSize")));
         gColumnBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(vector<glm::vec4>(Get<int>("MatrixSize")));
@@ -784,14 +784,14 @@ class RadiosityProgram : public Hors::Program {
     void AddToMatrix(const int idx, const unsigned place) {
         LabeledTimer2 timer("AddToMatrix");
 
-        std::vector<glm::vec4> fRowToBuffer;
-        std::vector<glm::vec4> fColumnToBuffer;
+        std::vector<float> fRowToBuffer;
+        std::vector<float> fColumnToBuffer;
         fRowToBuffer.reserve(Get<int>("MatrixSize"));
         fColumnToBuffer.reserve(Get<int>("MatrixSize"));
 
         for (int j = 0; j < Get<int>("MatrixSize"); ++j) {
-            fColumnToBuffer.push_back(glm::vec4(hierarchicalFF[quadsInMatrix[j]][idx]));
-            fRowToBuffer.push_back(glm::vec4(hierarchicalFF[idx][quadsInMatrix[j]]));
+            fColumnToBuffer.push_back(hierarchicalFF[quadsInMatrix[j]][idx]);
+            fRowToBuffer.push_back(hierarchicalFF[idx][quadsInMatrix[j]]);
         }
 
         std::vector<int> usedToBuffer;

@@ -7,7 +7,7 @@ shared vec4 buff[THREADS_COUNT];
 
 layout(std430, binding = 5) buffer layoutName9
 {
-    vec4 fRow[];
+    float fRow[];
 };
 
 layout(std430, binding = 8) buffer layoutName12

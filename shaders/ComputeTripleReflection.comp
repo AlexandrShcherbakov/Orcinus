@@ -5,12 +5,12 @@ const int THREADS_COUNT = min(MATRIX_SIZE, 1024);
 
 layout(std430, binding = 5) buffer layoutName8
 {
-    vec4 fRow[];
+    float fRow[];
 };
 
 layout(std430, binding = 6) buffer layoutName9
 {
-    vec4 fColumn[];
+    float fColumn[];
 };
 
 layout(std430, binding = 7) buffer layoutName10

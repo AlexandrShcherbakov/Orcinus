@@ -7,7 +7,7 @@ shared vec4 buff[THREADS_COUNT];
 
 layout(std430, binding = 6) buffer layoutName9
 {
-    vec4 fColumn[];
+    float fColumn[];
 };
 
 layout(std430, binding = 9) buffer layoutName12
@@ -27,7 +27,7 @@ void main() {
     uint trIdx = gl_LocalInvocationID.x;
     uint rowIdx = gl_WorkGroupID.x;
 
-    vec4 f_column = fColumn[trIdx];
+//    vec4 f_column = fColumn[trIdx];
     vec4 result = vec4(0);
 
     for (int iter = 0; iter < MATRIX_SIZE / THREADS_COUNT / 2; ++iter) {
