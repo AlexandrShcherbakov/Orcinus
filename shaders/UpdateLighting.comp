@@ -24,44 +24,52 @@ layout(std430, binding = 11) buffer layoutName13
 layout(local_size_x = THREADS_COUNT) in;
 layout (location = 0, rgba16f) uniform image2D localMatrixTex;
 void main() {
-    uint trIdx = gl_LocalInvocationID.x;
+    uint trIdx;
     uint rowIdx = gl_WorkGroupID.x;
 
     vec3 result = vec3(0);
 
-    for (int iter = 0; iter < MATRIX_SIZE / THREADS_COUNT / 2; ++iter) {
-        vec3 emission1 = localEmission[trIdx + iter * THREADS_COUNT];
-        vec3 ff1 = imageLoad(localMatrixTex, ivec2(rowIdx, trIdx + iter * THREADS_COUNT)).rgb;
-        vec3 emission2 = localEmission[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2];
-        vec3 ff2 = imageLoad(localMatrixTex, ivec2(rowIdx, trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2)).rgb;
+    if (MATRIX_SIZE > 2048) {
+        trIdx = gl_GlobalInvocationID.x;
+        for (int i = 0; i < MATRIX_SIZE; ++i) {
+            result += localEmission[i] * imageLoad(localMatrixTex, ivec2(trIdx, i)).rgb;
+        }
+        indirect_light[quadsInMatrix[trIdx]] = result + localEmission[trIdx];
+    } else {
+        trIdx = gl_LocalInvocationID.x;
+        for (int iter = 0; iter < MATRIX_SIZE / THREADS_COUNT / 2; ++iter) {
+            vec3 emission1 = localEmission[trIdx + iter * THREADS_COUNT];
+            vec3 ff1 = imageLoad(localMatrixTex, ivec2(rowIdx, trIdx + iter * THREADS_COUNT)).rgb;
+            vec3 emission2 = localEmission[trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2];
+            vec3 ff2 = imageLoad(localMatrixTex, ivec2(rowIdx, trIdx + iter * THREADS_COUNT + MATRIX_SIZE / 2)).rgb;
 
-        buff[trIdx] = emission1 * ff1 + emission2 * ff2;
-        memoryBarrierShared();
-        barrier();
+            buff[trIdx] = emission1 * ff1 + emission2 * ff2;
+            memoryBarrierShared();
+            barrier();
 
-        for (int i = MATRIX_SIZE / 4; i > 32; i >>= 1) {
-            if (trIdx < i) {
-                buff[trIdx] += buff[i + trIdx];
+            for (int i = MATRIX_SIZE / 4; i > 32; i >>= 1) {
+                if (trIdx < i) {
+                    buff[trIdx] += buff[i + trIdx];
+                }
+                memoryBarrierShared();
+                barrier();
             }
+
+            for (int i = 32; i > 0; i >>= 1) {
+                if (trIdx < i) {
+                    buff[trIdx] += buff[i + trIdx];
+                }
+            }
+
+            if (trIdx == 0) {
+                result += buff[0];
+            }
+
             memoryBarrierShared();
             barrier();
         }
-
-        for (int i = 32; i > 0; i >>= 1) {
-            if (trIdx < i) {
-                buff[trIdx] += buff[i + trIdx];
-            }
-        }
-
         if (trIdx == 0) {
-            result += buff[0];
+            indirect_light[quadsInMatrix[rowIdx]] = result + localEmission[rowIdx];
         }
-
-        memoryBarrierShared();
-        barrier();
-    }
-
-    if (trIdx == 0) {
-        indirect_light[quadsInMatrix[rowIdx]] = result + localEmission[rowIdx];
     }
 }

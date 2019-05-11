@@ -856,7 +856,11 @@ class RadiosityProgram : public Hors::Program {
             glUseProgram(addColumnInterReflectionCS); CHECK_GL_ERRORS;
 
             glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
-            glDispatchCompute(Get<int>("MatrixSize"), 1, 1); CHECK_GL_ERRORS;
+            if (Get<int>("MatrixSize") > 2048) {
+                glDispatchCompute(Get<int>("MatrixSize") / 1024, 1, 1); CHECK_GL_ERRORS;
+            } else {
+                glDispatchCompute(Get<int>("MatrixSize"), 1, 1); CHECK_GL_ERRORS;
+            }
             glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
         }
 
@@ -898,7 +902,11 @@ class RadiosityProgram : public Hors::Program {
         LabeledTimer2 timer("UpdateLightBuffer");
         glUseProgram(updateLightCS); CHECK_GL_ERRORS;
         glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
-        glDispatchCompute(Get<int>("MatrixSize"), 1, 1); CHECK_GL_ERRORS;
+        if (Get<int>("MatrixSize") > 2048) {
+            glDispatchCompute(Get<int>("MatrixSize") / 1024, 1, 1); CHECK_GL_ERRORS;
+        } else {
+            glDispatchCompute(Get<int>("MatrixSize"), 1, 1); CHECK_GL_ERRORS;
+        }
         glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
     }
 
