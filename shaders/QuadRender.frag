@@ -12,7 +12,7 @@ vec4 saturate(vec4 v) {
 }
 
 void main() {
-    outColor = pow(texture(Tex, vert_uv), vec4(2.2)) * vec4(indirect.xyz - out_direct.xyz * 0, 1);
+    outColor = pow(texture(Tex, vert_uv), vec4(2.2)) * vec4(indirect.xyz + out_direct.xyz, 1);
 	if (outColor.a < 0.5) {
 	    discard;
 	}

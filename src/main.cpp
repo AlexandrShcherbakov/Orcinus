@@ -270,7 +270,7 @@ class RadiosityProgram : public Hors::Program {
         for (int i = 0; i < quadsHierarchy.GetSize(); ++i) {
             const int matId = quadsHierarchy.GetQuad(i).GetMaterialId();
             materials.push_back(quadsColors[i]);
-            materials.push_back(materialsEmission[matId]);
+            materials.push_back(directLight[i] * quadsColors[i]);
         }
         materialsBuffer = Hors::GenAndFillBuffer<GL_SHADER_STORAGE_BUFFER>(materials);
 
@@ -529,7 +529,7 @@ class RadiosityProgram : public Hors::Program {
             }
             for (unsigned i = 0; i < hierarchicalFF.size(); ++i) {
                 if (k != 0) {
-//                    lighting[i] += bounce[i];
+                    lighting[i] += bounce[i];
                 } else {
 //                    lighting[i] += bounce[i];
                     directLight[i] = bounce[i];
@@ -1067,10 +1067,12 @@ public:
             quadsInMatrix[i] = i;
         }
         std::sort(quadsInMatrix.begin(), quadsInMatrix.end(), [this](int i, int j) {
-            const bool light1 = std::find(lightQuads.begin(), lightQuads.end(), i) != lightQuads.end();
-            const bool light2 = std::find(lightQuads.begin(), lightQuads.end(), j) != lightQuads.end();
-            return (light1 && !light2)
-                   || ((light1 == light2) && glm::distance(quadCenters[i], MainCamera.GetPosition()) < glm::distance(quadCenters[j], MainCamera.GetPosition()));
+            return glm::distance(quadCenters[i], MainCamera.GetPosition()) < glm::distance(quadCenters[j], MainCamera.GetPosition());
+//            const bool light1 = std::find(lightQuads.begin(), lightQuads.end(), i) != lightQuads.end();
+//            const bool light2 = std::find(lightQuads.begin(), lightQuads.end(), j) != lightQuads.end();
+//
+//            return (light1 && !light2)
+//                   || ((light1 == light2) && glm::distance(quadCenters[i], MainCamera.GetPosition()) < glm::distance(quadCenters[j], MainCamera.GetPosition()));
         });
         quadsInMatrix.resize(Get<int>("MatrixSize"));
 

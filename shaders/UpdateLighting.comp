@@ -69,7 +69,7 @@ void main() {
             barrier();
         }
         if (trIdx == 0) {
-            indirect_light[quadsInMatrix[rowIdx]] = result + localEmission[rowIdx];
+            indirect_light[quadsInMatrix[rowIdx]] = result;// + localEmission[rowIdx];
         }
     }
 }
