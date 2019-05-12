@@ -429,7 +429,7 @@ class RadiosityProgram : public Hors::Program {
         glBindImageTexture(0, localMatrixTex, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA16F); CHECK_GL_ERRORS;
 
         sumMatricesCS = Hors::CompileComputeShaderProgram(
-                Hors::ReadAndCompileShader("shaders/SumMatrices.comp", GL_COMPUTE_SHADER)
+                Hors::ReadAndCompileShader("shaders/SumMatrices.comp", GL_COMPUTE_SHADER, replacement)
         );
         glUseProgram(sumMatricesCS); CHECK_GL_ERRORS;
 
@@ -877,7 +877,11 @@ class RadiosityProgram : public Hors::Program {
             glUseProgram(sumMatricesCS); CHECK_GL_ERRORS;
 
             glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
-            glDispatchCompute(Get<int>("MatrixSize") / 32, Get<int>("MatrixSize") / 32, 1); CHECK_GL_ERRORS;
+            if (Get<int>("MatrixSize") >= 4096) {
+                glDispatchCompute(Get<int>("MatrixSize") / 1024, 1, 1); CHECK_GL_ERRORS;
+            } else {
+                glDispatchCompute(Get<int>("MatrixSize") / 32, Get<int>("MatrixSize") / 32, 1); CHECK_GL_ERRORS;
+            }
             glMemoryBarrier(GL_ALL_BARRIER_BITS); CHECK_GL_ERRORS;
         }
 
