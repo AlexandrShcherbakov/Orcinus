@@ -28,12 +28,17 @@ class ModelVertex {
 public:
     ModelVertex(): Point(0), Normal(0), TextureCoordinates(0), MaterialNumber(0) {}
     ModelVertex(const glm::vec4& point, const glm::vec4& normal, const glm::vec2& texCoord, const unsigned material):
-        Point(point), Normal(normal), TextureCoordinates(texCoord), MaterialNumber(material) {}
+        Point(point), Normal(normal), TextureCoordinates(texCoord), MaterialNumber(material) {
+        Normal.w = 0;
+        Normal = glm::normalize(Normal);
+    }
 
     ModelVertex(const HydraGeomData& data, const unsigned i) {
         const unsigned index = data.getTriangleVertexIndicesArray()[i];
         Point = *reinterpret_cast<const glm::vec4*>(data.getVertexPositionsFloat4Array() + index * 4);
-        Normal = glm::normalize(*reinterpret_cast<const glm::vec4*>(data.getVertexNormalsFloat4Array() + index * 4));
+        Normal = *reinterpret_cast<const glm::vec4*>(data.getVertexNormalsFloat4Array() + index * 4);
+        Normal.w = 0;
+        Normal = glm::normalize(Normal);
         TextureCoordinates = *reinterpret_cast<const glm::vec2*>(data.getVertexTexcoordFloat2Array() + index * 2);
         MaterialNumber = data.getTriangleMaterialIndicesArray()[i / 3];
     }
@@ -122,10 +127,11 @@ public:
 //        } else {
 //
 //        }
-        normal = glm::vec4(glm::cross(glm::vec3(Vertices[1].GetPoint() - Vertices[0].GetPoint()),
-                                      glm::vec3(Vertices[3].GetPoint() - Vertices[0].GetPoint())), 0);
+        normal = glm::vec4(-glm::cross(glm::normalize(glm::vec3(Vertices[1].GetPoint() - Vertices[0].GetPoint())),
+                                       glm::normalize(glm::vec3(Vertices[3].GetPoint() - Vertices[0].GetPoint()))), 0);
+//        normal = Vertices[0].GetNormal();
 
-        if (dot(normal, a.GetNormal()) < 0)
+        if (dot(normal, a.GetNormal()) > 0)
             normal = -normal;
 
 //        normal = glm::vec4(glm::normalize(glm::vec3(a.GetNormal())), 0);

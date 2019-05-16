@@ -342,7 +342,7 @@ class EmbreeHierarchicalFFJob {
     RTCDevice Device;
     RTCScene Scene;
     QuadsContainer& Quads;
-    std::vector<std::map<int, float> > FF;
+    std::vector<std::vector<std::pair<int, float>>> FF;
     RTCIntersectContext IntersectionContext;
     const float EPS = 1e-7;
     std::map<std::pair<int, int>, float> cache;
@@ -352,7 +352,7 @@ class EmbreeHierarchicalFFJob {
         const glm::vec4 normal1 = Quads.GetQuad(idx1).GetNormal();
         const glm::vec4 normal2 = Quads.GetQuad(idx2).GetNormal();
         const glm::vec4 RR = glm::normalize(Quads.GetQuad(idx1).GetSample(glm::vec2(0.5)) - Quads.GetQuad(idx2).GetSample(glm::vec2(0.5)));
-        if (glm::dot(-1.f * RR, normal1) < -1e-3 || glm::dot(RR, normal2) < -1e-3) {
+        if (glm::dot(-1.f * RR, normal1) < 1e-3 || glm::dot(RR, normal2) < 1e-3) {
             return 0;
         }
 
@@ -419,11 +419,11 @@ class EmbreeHierarchicalFFJob {
 
     void ProcessTwoQuads(const int idx1, const int idx2) {
         const float ff = GetTwoQuadsFF(idx1, idx2);
-        if (ff < 1e-9f) {
+        if (ff < 1e-6f) {
             return;
         }
-        FF[idx1][idx2] = ff / Quads.GetQuad(idx2).GetSquare();
-        FF[idx2][idx1] = ff / Quads.GetQuad(idx1).GetSquare();
+        FF[idx1].emplace_back(idx2, ff / Quads.GetQuad(idx2).GetSquare());
+        FF[idx2].emplace_back(idx1, ff / Quads.GetQuad(idx1).GetSquare());
     }
 
 public:
@@ -459,7 +459,7 @@ public:
         rtcReleaseDevice(Device);
     }
 
-    std::vector<std::map<int, float>> Execute(const unsigned maxDepth) {
+    std::vector<std::vector<std::pair<int, float>>> Execute(const unsigned maxDepth) {
 //        std::vector<Quad> result;
 //        for (int i = 0; i < Quads.GetSize(); ++i) {
 //            bigQuads.push_back(Quads.GetQuad(i));
@@ -486,7 +486,7 @@ public:
     }
 };
 
-std::vector<std::map<int, float>> ComputeFormFactorsEmbree(
+std::vector<std::vector<std::pair<int, float>>> ComputeFormFactorsEmbree(
     QuadsContainer& quads,
     const std::vector<std::vector<glm::vec4> >& points,
     const std::vector<std::vector<unsigned> >& indices,

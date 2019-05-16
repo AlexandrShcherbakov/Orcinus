@@ -24,7 +24,7 @@ std::vector<std::map<unsigned, float> > ComputeFormFactorsEmbree(
     const std::vector<std::vector<unsigned> >& indices
 );
 
-std::vector<std::map<int, float>> ComputeFormFactorsEmbree(
+std::vector<std::vector<std::pair<int, float>>> ComputeFormFactorsEmbree(
     QuadsContainer& quads,
     const std::vector<std::vector<glm::vec4> >& points,
     const std::vector<std::vector<unsigned> >& indices,
